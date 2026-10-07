@@ -1,0 +1,22 @@
+# Environment variables
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+npm-debug.log
+yarn-error.log
+
+# IDEs and OS
+.vscode/
+.idea/
+.DS_Store
