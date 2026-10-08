@@ -1,0 +1,218 @@
+{
+  "schema_version": "1.0.0",
+  "scheme_id": "sch_pm_kisan_samman_nidhi_2019",
+  "slug": "pm-kisan-samman-nidhi",
+  "name": "PM-Kisan Samman Nidhi (Pradhan Mantri Kisan Samman Nidhi)",
+  "name_hi": "प्रधानमंत्री किसान सम्मान निधि",
+  "department": "Department of Agriculture and Farmers Welfare, Ministry of Agriculture and Farmers Welfare",
+  "sponsoring_body": "Government of India",
+  "scheme_type": "direct_benefit_transfer",
+  "category": "agriculture",
+  "fiscal_year": "2026-27",
+  "academic_year": null,
+  "status": "active",
+  "is_active": true,
+  "index_state": "indexed",
+  "min_age": 18,
+  "max_age": null,
+  "gender": [
+    "ALL"
+  ],
+  "domicile_state": [
+    "ALL"
+  ],
+  "income_ceiling_annual": null,
+  "income_ceiling_scope": null,
+  "allowed_categories": [
+    "GENERAL",
+    "OBC",
+    "SC",
+    "ST",
+    "EWS"
+  ],
+  "requires_minority_flag": false,
+  "min_education_level": null,
+  "allowed_occupations": [
+    "farmer",
+    "tenant_farmer",
+    "cultivating_farmer"
+  ],
+  "conditional_gate_overrides": [],
+  "domain_gates": [
+    {
+      "rule_id": "dg_landholding_max",
+      "subject": "landholding_hectares",
+      "operator": "lte",
+      "value": 2.0,
+      "unit": "hectare",
+      "description": "Eligible families must hold cultivable land of up to 2 hectares (approximately 5 acres) as recorded in the land record of the State/UT.",
+      "on_missing_profile_fact": "assume_unrestricted_flag"
+    }
+  ],
+  "soft_clauses": [
+    {
+      "clause_id": "cl_kisan_001",
+      "text": "Institutional landholders, trust and charitable organisations, and landholdings held under community/collective cultivation rights are excluded from the benefit.",
+      "source": "Exclusion criteria, operational guidelines",
+      "mode": "judge_with_facts"
+    },
+    {
+      "clause_id": "cl_kisan_002",
+      "text": "Serving or retired officers and employees of Central/State Government Departments, PSUs and autonomous bodies (except Class IV and multi-tasking staff) are excluded.",
+      "source": "Exclusion criteria, operational guidelines",
+      "mode": "judge_with_facts"
+    },
+    {
+      "clause_id": "cl_kisan_003",
+      "text": "Income-tax payers in the assessment year preceding the current year are excluded from the benefit.",
+      "source": "Exclusion criteria, operational guidelines",
+      "mode": "judge_with_facts"
+    },
+    {
+      "clause_id": "cl_kisan_004",
+      "text": "Registration is accepted continuously through the portal or a Common Service Centre; there is no fixed annual application deadline, so the intake window has no closing date.",
+      "source": "Portal behaviour observed at verification time",
+      "mode": "judge_only"
+    }
+  ],
+  "benefits": [
+    {
+      "benefit_id": "ben_kisan_direct_cash",
+      "benefit_type": "direct_cash_transfer",
+      "description": "Fixed income support of ₹6,000 per year transferred directly into the bank account of small and marginal farmer families.",
+      "basis": "fixed",
+      "amount_inr": 6000,
+      "cap_amount_inr": null,
+      "annual_value_inr": 6000,
+      "frequency": "annual",
+      "disbursement_mode": "dbt",
+      "installment_count": 3,
+      "installment_amount_inr": 2000,
+      "eligibility_note": "Paid in three equal instalments of ₹2,000 (Apr–Jul, Aug–Nov, Dec–Mar). Credit is conditional on Aadhaar authentication and active DBT seeding."
+    }
+  ],
+  "benefits_summary": "₹6,000 per year paid directly to the Aadhaar-seeded bank account in three instalments of ₹2,000 — unconditional DBT income support.",
+  "benefits_total_value_annual": 6000,
+  "eligibility_text": "PM-Kisan Samman Nidhi provides income support of ₹6,000 per year to small and marginal farmer families holding cultivable land of up to 2 hectares, credited by direct benefit transfer in three instalments of ₹2,000. Open to eligible land-holding farmer families across all States and Union Territories of India with no upper age limit. The bank account must be seeded with Aadhaar and enabled for DBT; Aadhaar authentication is required. Institutional landholders, income-tax payers in the previous assessment year, and serving or retired officers of Central and State Governments, PSUs and autonomous bodies are excluded. Registration can be completed online or at a Common Service Centre and is accepted continuously through the year.",
+  "required_documents": [
+    {
+      "document_id": "doc_aadhaar",
+      "name": "Aadhaar Card",
+      "tier": 1,
+      "penalty_per_document": 0.05,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Unique Identification Authority of India (UIDAI)",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": "https://uidai.gov.in/",
+      "notes": "Mandatory for Aadhaar authentication at registration and at each instalment release."
+    },
+    {
+      "document_id": "doc_bank_passbook_aadhaar_seeded",
+      "name": "Bank Passbook with Aadhaar Seeding (DBT enabled)",
+      "tier": 1,
+      "penalty_per_document": 0.05,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Scheduled Bank / Regional Rural Bank",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "The DBT credit fails if the account is not Aadhaar-seeded; this is the single most common disbursement failure."
+    },
+    {
+      "document_id": "doc_land_record_ownership",
+      "name": "Land Record / ROR / Khasra Extract",
+      "tier": 4,
+      "penalty_per_document": 0.3,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "State Revenue Department / Tehsildar / District Land Records Office",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Highest-friction document in this scheme (Tier 4): requires a visit to the Tehsil or a State land-records portal. Must show the family's cultivable holding for the 2-hectare domain gate."
+    },
+    {
+      "document_id": "doc_farmer_self_declaration",
+      "name": "Farmer Self-Declaration on Non-Exclusion",
+      "tier": 0,
+      "penalty_per_document": 0.0,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Self (attested at CSC / tehsil)",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Tier 0 — attests that the applicant is not an institutional landholder, income-tax payer or excluded government employee."
+    },
+    {
+      "document_id": "doc_aadhaar_dbi_consent",
+      "name": "Aadhaar Demographic Authentication Consent",
+      "tier": 0,
+      "penalty_per_document": 0.0,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Self (signed / e-sign)",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Tier 0 — consent form for offline Aadhaar (DBI) authentication."
+    },
+    {
+      "document_id": "doc_csc_registration_receipt",
+      "name": "CSC Registration Receipt",
+      "tier": 1,
+      "penalty_per_document": 0.05,
+      "requirement_weight": 0.0,
+      "is_mandatory": false,
+      "issuance_authority": "Common Service Centre (VLE)",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Recommended only when registering through a CSC; weight 0.0 so it never penalises an online registrant."
+    }
+  ],
+  "portal_url": "https://pmkisan.gov.in/",
+  "alternate_urls": [],
+  "application_mode": "online",
+  "intake_window": {
+    "opens_on": "2019-02-24",
+    "closes_on": null,
+    "cycle_status": "open",
+    "source_note": "Continuous intake observed on the PM-Kisan portal: new registrations are accepted year-round with no published closing date; instalment cycles are quarterly."
+  },
+  "verification_status": "INTAKE_OPEN",
+  "verified_at": "2026-10-07T09:52:00+05:30",
+  "extracted_deadline": null,
+  "snapshot_url": "snapshots/sch_pm_kisan_samman_nidhi_2019/vf_20261007_0952_pm_kisan_001.png",
+  "verification_job_id": "vf_20261007_0952_pm_kisan_001",
+  "last_known_status": null,
+  "source": {
+    "url": "https://pmkisan.gov.in/",
+    "discovered_by": "tinyfish_search",
+    "first_seen_at": "2026-01-09T14:05:00+05:30",
+    "last_crawled_at": "2026-10-07T09:50:33+05:30",
+    "fetch_tier": "tinyfish_fetch",
+    "content_hash": "sha256:a41d8ef05b29c7364fae81d0b5c7293e6d4f08a1b95c37e2d6f4a08c1e3b5972",
+    "parser_version": "scheme-parser@1.0.0"
+  },
+  "parse": {
+    "parse_confidence": 0.97,
+    "ocr_used": false,
+    "repair_attempts": 0,
+    "review_reasons": []
+  },
+  "tags": [
+    "dbt",
+    "pm-kisan",
+    "farmer",
+    "landholding",
+    "aadhaar-seeding",
+    "central-sector",
+    "agriculture"
+  ],
+  "created_at": "2026-01-09T14:22:18+05:30",
+  "updated_at": "2026-10-07T09:51:47+05:30"
+}

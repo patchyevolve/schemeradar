@@ -1,0 +1,316 @@
+{
+  "schema_version": "1.0.0",
+  "scheme_id": "sch_delhi_post_matric_scholarship_sc_st_obc_2026",
+  "slug": "delhi-post-matric-scholarship-sc-st-obc",
+  "name": "Post-Matric Scholarship for SC/ST/OBC Students (NCT of Delhi)",
+  "name_hi": "दिल्ली में एससी/एसटी/ओबीसी छात्रों के लिए पोस्ट-मैट्रिक छात्रवृत्ति",
+  "department": "Directorate of Higher Education, Department of Education, NCT of Delhi",
+  "sponsoring_body": "Government of NCT of Delhi",
+  "scheme_type": "scholarship",
+  "category": "education",
+  "fiscal_year": "2026-27",
+  "academic_year": "2026-27",
+  "status": "active",
+  "is_active": true,
+  "index_state": "indexed",
+  "min_age": 15,
+  "max_age": 30,
+  "gender": [
+    "ALL"
+  ],
+  "domicile_state": [
+    "DL"
+  ],
+  "income_ceiling_annual": 250000,
+  "income_ceiling_scope": "household",
+  "allowed_categories": [
+    "SC",
+    "ST",
+    "OBC"
+  ],
+  "requires_minority_flag": false,
+  "min_education_level": "10th",
+  "allowed_occupations": null,
+  "conditional_gate_overrides": [
+    {
+      "override_id": "ovr_obc_income_ceiling",
+      "when": {
+        "social_category": [
+          "OBC"
+        ]
+      },
+      "set": {
+        "income_ceiling_annual": 100000
+      }
+    }
+  ],
+  "domain_gates": [],
+  "soft_clauses": [
+    {
+      "clause_id": "cl_pms_001",
+      "text": "Applicant must not be receiving any other scholarship or fee assistance for the same course and the same academic year.",
+      "source": "Para 4.2, scheme guidelines",
+      "mode": "judge_with_facts"
+    },
+    {
+      "clause_id": "cl_pms_002",
+      "text": "The course must be post-matric (Class XI and above) and the institution must be recognised by the appropriate State/Central authority.",
+      "source": "Para 3.1, scheme guidelines",
+      "mode": "judge_with_facts"
+    },
+    {
+      "clause_id": "cl_pms_003",
+      "text": "Students with a study gap year, or who have discontinued and rejoined the same stage, are not eligible in the year of re-admission.",
+      "source": "Para 5.4, scheme guidelines",
+      "mode": "judge_with_facts"
+    },
+    {
+      "clause_id": "cl_pms_004",
+      "text": "OBC applicants must additionally produce a Non-Creamy Layer certificate issued within the current financial year.",
+      "source": "Appendix B, scheme guidelines",
+      "mode": "judge_with_facts"
+    }
+  ],
+  "benefits": [
+    {
+      "benefit_id": "ben_tuition_fee_reimbursement",
+      "benefit_type": "tuition_reimbursement",
+      "description": "Reimbursement of the tuition fee actually charged by the institution for the academic year, subject to a ceiling.",
+      "basis": "actual_upto_cap",
+      "amount_inr": null,
+      "cap_amount_inr": 48000,
+      "annual_value_inr": 48000,
+      "frequency": "per_academic_year",
+      "disbursement_mode": "reimbursement",
+      "installment_count": 1,
+      "installment_amount_inr": 48000,
+      "eligibility_note": "Released to the institution on production of the fee receipt; available to both hostellers and day scholars."
+    },
+    {
+      "benefit_id": "ben_maintenance_allowance",
+      "benefit_type": "maintenance_allowance",
+      "description": "Monthly maintenance allowance credited directly to the student's Aadhaar-seeded bank account.",
+      "basis": "fixed",
+      "amount_inr": 1000,
+      "cap_amount_inr": null,
+      "annual_value_inr": 12000,
+      "frequency": "monthly",
+      "disbursement_mode": "dbt",
+      "installment_count": 12,
+      "installment_amount_inr": 1000,
+      "eligibility_note": "₹1,000 per month, i.e. ₹12,000 per academic year, subject to continued enrolment and attendance."
+    }
+  ],
+  "benefits_summary": "Up to ₹48,000 per year toward tuition fee (actuals, capped) plus ₹1,000 per month maintenance allowance (₹12,000/year) — up to ₹60,000 per academic year.",
+  "benefits_total_value_annual": 60000,
+  "eligibility_text": "Post-matric scholarship for SC, ST and OBC students studying in Class XI, XII, undergraduate, postgraduate or professional courses within the National Capital Territory of Delhi. Applicant must be a permanent resident of Delhi with a Delhi domicile certificate. Annual family household income must not exceed ₹2,50,000 for SC and ST candidates, and must not exceed ₹1,00,000 for OBC candidates, supported by an SDM or Tehsildar attested income certificate. The scholarship reimburses tuition fee actually paid to the institution up to ₹48,000 per academic year and pays a maintenance allowance of ₹1,000 per month by direct benefit transfer to an Aadhaar-seeded bank account. Application is submitted through the institution or the Delhi e-District portal within the notified academic-year window. Non-Creamy Layer certification is mandatory for OBC applicants.",
+  "required_documents": [
+    {
+      "document_id": "doc_aadhaar",
+      "name": "Aadhaar Card",
+      "tier": 1,
+      "penalty_per_document": 0.05,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Unique Identification Authority of India (UIDAI)",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": "https://uidai.gov.in/",
+      "notes": "Aadhaar must be seeded to the DBT bank account used for the maintenance allowance."
+    },
+    {
+      "document_id": "doc_caste_certificate",
+      "name": "Caste Certificate (SC/ST/OBC)",
+      "tier": 2,
+      "penalty_per_document": 0.1,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Sub-Divisional Magistrate / Tehsildar, Government of NCT of Delhi",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": "https://edistrict.delhigovt.nic.in/",
+      "notes": "Must be issued in the prescribed Delhi format; central-format certificates require re-validation."
+    },
+    {
+      "document_id": "doc_domicile_certificate",
+      "name": "Domicile / Residence Certificate (Delhi)",
+      "tier": 2,
+      "penalty_per_document": 0.15,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Sub-Divisional Magistrate, Government of NCT of Delhi",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": "https://edistrict.delhigovt.nic.in/",
+      "notes": "Primary proof of the Delhi domicile gate; valid for the notified tenure."
+    },
+    {
+      "document_id": "doc_income_certificate_sdm",
+      "name": "Income Certificate (SDM/Tehsildar/e-District attested)",
+      "tier": 3,
+      "penalty_per_document": 0.2,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Sub-Divisional Magistrate / Tehsildar / Delhi e-District",
+      "applies_when": null,
+      "alternatives": [
+        {
+          "document_id": "doc_income_self_declaration",
+          "policy": "provisional",
+          "weight": 0.5
+        }
+      ],
+      "guide_url": "https://edistrict.delhigovt.nic.in/",
+      "notes": "Highest-friction document in this scheme; charged at 0.20 when absent. A self-declaration reduces the charge to 0.10 for provisional submission only."
+    },
+    {
+      "document_id": "doc_income_self_declaration",
+      "name": "Self-Declaration Affidavit of Family Income",
+      "tier": 0,
+      "penalty_per_document": 0.0,
+      "requirement_weight": 0.0,
+      "is_mandatory": false,
+      "issuance_authority": "Notary / Magistrate (self-attested where accepted)",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Tier 0 by design: zero friction, but only provisionally acceptable — the SDM certificate is still required before final sanction."
+    },
+    {
+      "document_id": "doc_non_creamy_layer_certificate",
+      "name": "Non-Creamy Layer Certificate (OBC)",
+      "tier": 2,
+      "penalty_per_document": 0.15,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Sub-Divisional Magistrate, Government of NCT of Delhi",
+      "applies_when": "social_category == 'OBC'",
+      "alternatives": [],
+      "guide_url": "https://edistrict.delhigovt.nic.in/",
+      "notes": "Must be issued within the current financial year; applies only to OBC applicants."
+    },
+    {
+      "document_id": "doc_previous_year_marksheet",
+      "name": "Previous Examination Marksheet",
+      "tier": 1,
+      "penalty_per_document": 0.05,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Recognised school / board / university",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Proof of merit and continuity of study."
+    },
+    {
+      "document_id": "doc_bank_passbook",
+      "name": "Bank Passbook with Aadhaar Seeding (DBT)",
+      "tier": 1,
+      "penalty_per_document": 0.05,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Scheduled Bank / Regional Rural Bank",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "First page must show account number, IFSC and the beneficiary name."
+    },
+    {
+      "document_id": "doc_bonafide_student_certificate",
+      "name": "Bonafide Student Certificate",
+      "tier": 1,
+      "penalty_per_document": 0.05,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Head of Institution",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Issued by the college/school, usually same-day."
+    },
+    {
+      "document_id": "doc_fee_receipt_or_admission_letter",
+      "name": "Fee Receipt or Admission Letter",
+      "tier": 1,
+      "penalty_per_document": 0.05,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Institution",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Basis for the tuition-fee reimbursement claim."
+    },
+    {
+      "document_id": "doc_passport_photograph",
+      "name": "Recent Passport-Size Photograph",
+      "tier": 0,
+      "penalty_per_document": 0.0,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Self",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Tier 0 — no friction."
+    },
+    {
+      "document_id": "doc_declaration_undertaking",
+      "name": "Declaration & Undertaking (prescribed format)",
+      "tier": 0,
+      "penalty_per_document": 0.0,
+      "requirement_weight": 1.0,
+      "is_mandatory": true,
+      "issuance_authority": "Self (institution counter-signed)",
+      "applies_when": null,
+      "alternatives": [],
+      "guide_url": null,
+      "notes": "Tier 0 — no friction."
+    }
+  ],
+  "portal_url": "https://edistrict.delhigovt.nic.in/",
+  "alternate_urls": [
+    "https://ds.delhi.gov.in/"
+  ],
+  "application_mode": "hybrid",
+  "intake_window": {
+    "opens_on": "2026-06-01",
+    "closes_on": "2026-11-30",
+    "cycle_status": "open",
+    "source_note": "Institution-level submission window for Academic Year 2026-27 as notified by the Directorate of Higher Education, NCT of Delhi."
+  },
+  "verification_status": "INTAKE_OPEN",
+  "verified_at": "2026-10-07T09:45:00+05:30",
+  "extracted_deadline": "2026-11-30",
+  "snapshot_url": "snapshots/sch_delhi_post_matric_scholarship_sc_st_obc_2026/vf_20261007_0945_dl_pms_001.png",
+  "verification_job_id": "vf_20261007_0945_dl_pms_001",
+  "last_known_status": null,
+  "source": {
+    "url": "https://ds.delhi.gov.in/",
+    "discovered_by": "tinyfish_search",
+    "first_seen_at": "2026-06-14T10:20:00+05:30",
+    "last_crawled_at": "2026-10-07T09:40:12+05:30",
+    "fetch_tier": "tinyfish_fetch",
+    "content_hash": "sha256:3b7f1c9a2e5d84f6011a7c92be4d5f38a16c0e92d7b45f8ac3e6014d92f5b7a1",
+    "parser_version": "scheme-parser@1.0.0"
+  },
+  "parse": {
+    "parse_confidence": 0.94,
+    "ocr_used": false,
+    "repair_attempts": 0,
+    "review_reasons": []
+  },
+  "tags": [
+    "scholarship",
+    "delhi",
+    "sc",
+    "st",
+    "obc",
+    "post-matric",
+    "tuition-fee",
+    "dbt",
+    "2026-27"
+  ],
+  "created_at": "2026-06-14T10:35:41+05:30",
+  "updated_at": "2026-10-07T09:42:05+05:30"
+}

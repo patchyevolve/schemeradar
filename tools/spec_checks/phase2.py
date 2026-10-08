@@ -99,9 +99,29 @@ m = re.search(r"(\d+)\s+`?\$defs`?", build_order)
 bo_defs = int(m.group(1)) if m else -1
 print(f"  info  doc $defs={doc_defs} required={doc_req} | BUILD_ORDER claims $defs={bo_defs}")
 
+# ---- task 2.4: seeds/ must be a verbatim copy of the DATA_SPEC 4.1/5.1 instances ----
+SEED_DIR = ROOT / "seeds"
+seed_files = sorted(SEED_DIR.glob("*.json"))
+doc_by_id = {o.get("scheme_id"): o for _, o in instances if isinstance(o, dict)}
+seed_ok, seed_detail = [], []
+for f in seed_files:
+    try:
+        o = json.loads(f.read_text(encoding="utf-8"))
+    except Exception as e:
+        seed_ok.append(False); seed_detail.append(f"{f.name}: parse error {e}"); continue
+    sid = o.get("scheme_id")
+    same = doc_by_id.get(sid) == o
+    seed_ok.append(same)
+    seed_detail.append(f"{f.name}: verbatim={same}")
+print("  info  " + "; ".join(seed_detail) if seed_detail else "  info  no seed files")
+rupee = " ".join(p.read_text(encoding="utf-8") for p in seed_files)
 checks = [
     ("artefact == DATA_SPEC 2.3 (verbatim, no hand-edits)",
      art is not None and scheme_schema is not None and art == scheme_schema[1]),
+    ("2 canonical seed instances, verbatim from DATA_SPEC 4.1/5.1",
+     len(seed_files) == 2 and all(seed_ok)),
+    ("rupee figures survive load byte-for-byte",
+     all(s in rupee for s in ("₹2,50,000", "₹6,000", "₹48,000"))),
     ("44 required fields", doc_req == 44 and art is not None and len(art["required"]) == 44),
     ("additionalProperties:false everywhere (artefact)",
      art is not None and art.get("additionalProperties") is False),
