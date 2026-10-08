@@ -1,0 +1,5 @@
+# pnpm 12 requires an explicit decision per package that ships a build script.
+# unrs-resolver provides the native resolver used by eslint-config-next;
+# it is a dev-time lint dependency, not part of the shipped bundle.
+allowBuilds:
+  unrs-resolver: true

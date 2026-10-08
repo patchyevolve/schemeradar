@@ -296,6 +296,16 @@ Two canonical worked examples are carried verbatim through every document, with 
 >
 > Service ports below are **local development defaults** — they are not part of the frozen canonical constants.
 
+> **Build status** — this README is the *target* Quickstart. Each step is marked with where it stands today, so nothing here overpromises:
+>
+> | Step | Status |
+> |---|---|
+> | 1 Clone · 2 Docker infra · 3 venv · 4 `.env` · 6 API · 7 Dashboard | ✅ **Verified working** (Build Order Step 1) |
+> | 5 Create collections & seed | ⬜ Build Order Step 2 — `tools/seed.py` not written yet |
+> | 8 Test suite | ⬜ Build Order Step 6 — `pytest` installed, acceptance tests not written yet |
+>
+> Frozen scope: architecture (`docs/ARCHITECTURE.md`), data model (`docs/DATA_SPEC.md`), workflow & tests (`docs/WORKFLOW_AND_TESTS.md`) and pitch deck (`docs/PPT_SUBMISSION.md`) are complete and CI-validated via `python -m tools.validate_specs`.
+
 ### 1 · Clone & enter
 
 ```bash
