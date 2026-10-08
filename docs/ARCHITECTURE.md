@@ -139,7 +139,7 @@ flowchart TD
     QC2 -->|"yes"| EMBED["Embedder<br/>BAAI/bge-m3 → 1024-dim vector<br/>input: name + department + benefits + eligibility_text"]
 
     EMBED --> UPSERT_M["MongoDB Upsert<br/>canonical Scheme document + revision history"]
-    EMBED --> UPSERT_Q["Qdrant Upsert<br/>point id = scheme_id · vector + payload index"]
+    EMBED --> UPSERT_Q["Qdrant Upsert<br/>point id = uuid5(NAMESPACE_DNS, scheme_id) · vector + payload index"]
     EMBED --> REBUILD["Rebuild in-memory BM25 Index<br/>(from canonical eligibility_text corpus)"]
 
     UPSERT_M --> LOG["Ingestion Audit Log<br/>scheme_id · source_url · fetched_at · parser_version"]
@@ -263,11 +263,11 @@ flowchart TD
 |-----------|---------------|
 | **Responsibility** | Dense semantic recall over the scheme corpus. |
 | **Collection** | `schemes` |
-| **Point ID** | `scheme_id` (string, globally unique, deterministic from slug + fiscal year) |
+| **Point ID** | `uuid5(NAMESPACE_DNS, scheme_id)` — a deterministic UUID. Qdrant accepts only an unsigned integer or a UUID, never a string, so the string `scheme_id` cannot be the storage key. `scheme_id` stays the globally unique logical identifier (deterministic from slug + fiscal year) and travels in the payload as the **primary join key** back to MongoDB. |
 | **Vector** | 1024-dim, `BAAI/bge-m3`, cosine distance |
 | **Embedded text** | `name + " " + department + " " + benefits_text + " " + eligibility_text` |
 | **Payload (indexable)** | `domicile_state`, `category`, `scheme_type`, `department`, `fiscal_year`, `is_active`, `verification_status` |
-| **Payload (stored)** | `name`, `income_ceiling_annual`, `min_age`, `max_age`, `benefits_summary` |
+| **Payload (stored)** | `scheme_id` (join key), `name`, `income_ceiling_annual`, `min_age`, `max_age`, `benefits_summary` |
 | **Owns** | ANN search, payload filtering, point upsert/delete. |
 | **Must NOT own** | Canonical document truth (MongoDB), BM25 scoring, any rule evaluation. |
 
@@ -700,7 +700,7 @@ Structured logs with `trace_id` spanning: gateway → retrieval → scoring → 
 |--------|------|------------|
 | `ProfileContext` | DTO | Validated citizen profile: `age`, `gender`, `domicile_state`, `education_level`, `annual_household_income`, `social_category`, `minority_status`, `occupation`, `documents_in_hand[]` |
 | `Scheme` | Canonical doc | The single authoritative scheme record (full field schema in Phase 2) |
-| `scheme_id` | ID | Globally unique, deterministic scheme identifier; also the Qdrant point ID |
+| `scheme_id` | ID | Globally unique, deterministic scheme identifier; the Qdrant point is addressed as `uuid5(NAMESPACE_DNS, scheme_id)` and `scheme_id` is stored in the payload as the join key |
 | `hard_gates` | Collection | The 7 deterministic gates in §6.2.1 |
 | `gate_trace[]` | Array | Per-gate `{gate, pass, observed, required}` audit record |
 | `required_documents[]` | Array | Documents needed to apply, each with `tier`, `p(d)`, `w_req` |

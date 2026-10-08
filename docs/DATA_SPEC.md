@@ -30,7 +30,7 @@ Every symbol, field, and enum below is the same one introduced in Phase 1. This 
 
 | Phase 1 reference | Phase 2 field / location | Status |
 |---|---|---|
-| `scheme_id` (Qdrant point ID) | `Scheme.scheme_id` | Identical |
+| `scheme_id` (Qdrant payload join key) | `Scheme.scheme_id` | Identical |
 | `income_ceiling_annual` | `Scheme.income_ceiling_annual` (top-level gate field) | Identical |
 | `min_age` / `max_age` | `Scheme.min_age` / `Scheme.max_age` | Identical |
 | `gender` (set, `["ALL"]` = unrestricted) | `Scheme.gender: Gender[]` | Identical |
@@ -83,7 +83,7 @@ Domain gates read optional profile facts (e.g. `landholding_hectares`). These li
 |---|---|---|
 | **MongoDB `schemes`** | Canonical source of truth | The full `Scheme` document exactly as specified in §2 |
 | **MongoDB `scheme_revisions`** | Version history | One record per accepted parse: `scheme_id`, `revision`, `content_hash`, `parser_version`, raw source URL, LLM `parse_provenance`, `accepted_at` |
-| **Qdrant `schemes`** | Derived search index | Point `{id: scheme_id, vector: 1024-d bge-m3, payload: subset of Scheme}` — see §3.3 |
+| **Qdrant `schemes`** | Derived search index | Point `{id: uuid5(NAMESPACE_DNS, scheme_id), vector: 1024-d bge-m3, payload: subset of Scheme incl. scheme_id}` — see §3.3 |
 | **In-memory BM25** | Derived lexical index | Corpus built from the derived text fields below; version-stamped, rebuildable |
 | **MongoDB `verification_logs`** | Verification audit | Every Tier-3 run (§8.1) |
 | **MongoDB `ingestion_audit`** | Ingestion audit | Every Search/Fetch/Parse cycle (§8.2) |
@@ -114,7 +114,7 @@ These are **not stored as independent truth** — they are recomputed from the c
 | Dates | ISO-8601. `format: date` → `YYYY-MM-DD`; `format: date-time` → RFC 3339 with IST offset `+05:30` |
 | Fiscal year | `YYYY-YY` string, e.g. `"2026-27"` (Indian FY: Apr–Mar) |
 | Academic year | Same format; `null` for non-education schemes |
-| IDs | `scheme_id` is globally unique, lowercase snake_case, suffix = first notified year. It is the MongoDB `_id` business key **and** the Qdrant point ID |
+| IDs | `scheme_id` is globally unique, lowercase snake_case, suffix = first notified year. It is the MongoDB `_id` business key **and** the Qdrant payload join key (the point id is `uuid5(NAMESPACE_DNS, scheme_id)`) |
 | Document IDs | `document_id` is a stable slug (`^doc_[a-z0-9_]+$`) shared across schemes so `ProfileContext.documents_in_hand[]` can be matched globally |
 | Extra properties | `additionalProperties: false` everywhere — an unexpected key is a **schema violation**, which is a fail-closed condition (§7.5) |
 
@@ -161,7 +161,7 @@ These are **not stored as independent truth** — they are recomputed from the c
     "scheme_id": {
       "type": "string", "minLength": 8, "maxLength": 128,
       "pattern": "^sch_[a-z0-9]+(?:_[a-z0-9]+)*$",
-      "description": "Globally unique scheme identifier; also the Qdrant point ID."
+      "description": "Globally unique scheme identifier; carried in the Qdrant payload as the join key (point id = uuid5(NAMESPACE_DNS, scheme_id))."
     },
     "slug": {
       "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 160
@@ -716,8 +716,11 @@ This instance is **Phase 1 §6.4.3's worked example**, reproduced field-for-fiel
 
 Rule: **the Qdrant payload is a strict subset of the canonical Scheme**; nothing in Qdrant may be authoritative.
 
+The point is addressed as `uuid5(NAMESPACE_DNS, scheme_id)` because Qdrant accepts only an unsigned integer or a UUID as a point id — never a string (ARCHITECTURE §5.3.1). `scheme_id` is therefore carried in the payload as the **primary join key** back to MongoDB. The projection is **13 keys**: 7 filterable + 5 stored + `scheme_id`.
+
 | Payload key | Qdrant role | Source field |
 |---|---|---|
+| `scheme_id` | stored (join key) | `scheme_id` |
 | `domicile_state` | filterable | `domicile_state` |
 | `category` | filterable | `category` |
 | `scheme_type` | filterable | `scheme_type` |
@@ -1574,7 +1577,7 @@ FUNCTION ParseScheme(fetch_result):
 
 | Concept | Rule |
 |---|---|
-| Identity | `scheme_id` is the upsert key in MongoDB **and** the Qdrant point ID |
+| Identity | `scheme_id` is the upsert key in MongoDB **and** the Qdrant payload join key; the point id is `uuid5(NAMESPACE_DNS, scheme_id)` |
 | Change detection | `source.content_hash` (sha256 of the rendered Markdown). Unchanged hash ⇒ skip parse entirely, only refresh `last_crawled_at` |
 | Revision | Changed hash ⇒ new `scheme_revisions` record; canonical `schemes` updated only after L1–L5 pass |
 | Authoritative-ness | A previously parsed field is **never** treated as a default for a new parse. If the new source omits `income_ceiling_annual`, the field becomes `null` — it does not retain yesterday's number. This is what stops stale ceilings from surviving a re-crawl |
@@ -1666,7 +1669,7 @@ New constants introduced by this document. Phase 1 §9 values are untouched and 
 | `MAX_TIER3_CONCURRENCY` | `3` | Phase 1 §7.3 |
 | Snapshot object lifecycle | 90 days | Phase 1 §7.3 |
 | MongoDB collections | `schemes`, `scheme_revisions`, `verification_logs`, `citizen_profiles`, `ingestion_audit` | Phase 1 §5.3.3 |
-| Qdrant collection | `schemes`, point ID = `scheme_id` | Phase 1 §5.3.1 |
+| Qdrant collection | `schemes`, point ID = `uuid5(NAMESPACE_DNS, scheme_id)`, payload join key = `scheme_id` | Phase 1 §5.3.1 |
 
 ---
 

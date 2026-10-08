@@ -303,7 +303,7 @@ Two canonical worked examples are carried verbatim through every document, with 
 > | Step | Status |
 > |---|---|
 > | 1 Clone · 2 Docker infra · 3 venv · 4 `.env` · 6 API · 7 Dashboard | ✅ **Verified working** (Build Order Step 1) |
-> | 5 Create collections & seed | ✅ **Verified working** (Build Order Step 2) — runtime JSON Schema, Pydantic ladder (73 tests), 2 canonical seed instances, Mongo indexes + aux collections, idempotent `tools/seed.py`, stamped `tools/build_bm25.py`. Gate G2: filtered Qdrant query, `"post matric"` / `"kisan"` BM25 queries and the `content_hash` no-op all pass; the `qualify` scoring precursor (0.887 / 0.688 / 0.988) still needs Steps 3–4 |
+> | 5 Create collections & seed | ✅ **Verified working** (Build Order Step 2) — **Gate G2 locked**: schema contract, storage + indexes, idempotent seed, filtered Qdrant and BM25 recall. Score proofs (0.887 / 0.688 / 0.988) land with Step 4, Gate G4 |
 > | 8 Test suite | ⬜ Build Order Step 6 — `pytest` installed, acceptance tests not written yet |
 >
 > Frozen scope: architecture (`docs/ARCHITECTURE.md`), data model (`docs/DATA_SPEC.md`), workflow & tests (`docs/WORKFLOW_AND_TESTS.md`) and pitch deck (`docs/PPT_SUBMISSION.md`) are complete and CI-validated via `python -m tools.validate_specs`.

@@ -169,7 +169,7 @@ Stand up the canonical data layer and prove the schema contract end-to-end **bef
 |---|------|-------|
 | 2.1 | Convert `docs/DATA_SPEC.md` §2.3 into the runtime JSON Schema artefact | **Verbatim** — 44 required fields, `additionalProperties: false`, 26 `$defs`. No hand-edits |
 | 2.2 | Author Pydantic v2 models mirroring the schema exactly | The same models power the L1–L5 validation ladder in Step 3 |
-| 2.3 | Create indexes: MongoDB (unique `scheme_id`, `is_active`, `domicile_state`, `content_hash`) and Qdrant (`schemes`, 1024-dim, cosine) | Point ID = `scheme_id` |
+| 2.3 | Create indexes: MongoDB (unique `scheme_id`, `is_active`, `domicile_state`, `content_hash`) and Qdrant (`schemes`, 1024-dim, cosine) | Point ID = `uuid5(NAMESPACE_DNS, scheme_id)`; `scheme_id` is the payload join key |
 | 2.4 | Load the two canonical instances from DATA_SPEC §4.1 and §5.1 | `sch_delhi_post_matric_scholarship_sc_st_obc_2026`, `sch_pm_kisan_samman_nidhi_2019` |
 | 2.5 | Write `tools/seed.py` — validate → embed → upsert, idempotent on `content_hash` | Re-running must not duplicate |
 | 2.6 | Build the Qdrant payload projection (DATA_SPEC §3.3) | Indexable: `domicile_state`, `category`, `scheme_type`, `department`, `fiscal_year`, `is_active`, `verification_status` |
@@ -183,10 +183,17 @@ Stand up the canonical data layer and prove the schema contract end-to-end **bef
 ### 4.4 Outputs / Definition of Done
 
 - [x] Both canonical instances **validate against the JSON Schema** and all 12 cross-field invariants pass
-- [ ] `POST /api/v1/profile/qualify` precursor (a local script) reproduces the published proofs: **0.887 / HIGH**, **0.688**, **0.988**
 - [x] Qdrant returns both points on a filtered query; BM25 returns both on a lexical query (`"post matric"`, `"kisan"`)
 - [x] `content_hash` unchanged ⇒ re-seed is a no-op
-- [ ] **Gate G2**
+- [x] **Gate G2**
+
+> **Scope note — score proofs live in Step 4.** End-to-end score assembly
+> (**0.887 / HIGH**, **0.688**, **0.988**) is **deferred to Step 4, Gate G4
+> (§6.5)**. It needs `S_det` from the Deterministic Rule Evaluator, `S_hybrid`
+> from hybrid fusion and `P_docs` from the Document Friction Penaltizer — all
+> produced by `services/scoring/` (tasks 4.x), which does not exist until
+> Step 4. Step 2 proves the **data layer** only: schema contract, storage,
+> idempotent seeding and lexical/vector recall. See §6.5 for the score DoD.
 
 ### 4.5 Validation
 

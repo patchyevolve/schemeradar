@@ -61,7 +61,7 @@
       "minLength": 8,
       "maxLength": 128,
       "pattern": "^sch_[a-z0-9]+(?:_[a-z0-9]+)*$",
-      "description": "Globally unique scheme identifier; also the Qdrant point ID."
+      "description": "Globally unique scheme identifier; carried in the Qdrant payload as the join key (point id = uuid5(NAMESPACE_DNS, scheme_id))."
     },
     "slug": {
       "type": "string",

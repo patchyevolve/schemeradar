@@ -25,9 +25,11 @@ from typing import Any, Iterable, Mapping
 QDRANT_VECTOR_SIZE = 1024
 QDRANT_DISTANCE = "Cosine"
 
-# Namespace for `point_id`.  Anchored to the project's own URI so it never
-# collides with another uuid5 usage elsewhere.
-POINT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://schemeradar.in/")
+# Namespace for `point_id` — the RFC 4122 well-known NAMESPACE_DNS constant,
+# exactly as ARCHITECTURE §5.3.1 now specifies.  Being a published constant it
+# is fixed forever: changing it would mint new point ids and orphan every
+# existing point.
+POINT_NAMESPACE = uuid.NAMESPACE_DNS
 
 # --- task 2.3: MongoDB indexes on `schemes` --------------------------------
 # `scheme_id` is the natural key and therefore unique.  The other three are
@@ -73,8 +75,8 @@ AUX_COLLECTIONS: dict[str, tuple[tuple[str | tuple[str, ...], dict[str, Any]], .
 
 # --- task 2.6: Qdrant payload projection (DATA_SPEC §3.3) ------------------
 # The payload is a strict subset of the canonical Scheme; nothing in Qdrant
-# may be authoritative.  §3.3 lists 7 filterable + 5 stored keys = 12; we add
-# `scheme_id` as the 13th so a hit can be joined back to MongoDB.
+# may be authoritative.  §3.3 lists 13 keys: 7 filterable, 5 stored, plus
+# `scheme_id` as the join key back to MongoDB.
 #
 # WHY `scheme_id` has to be in the payload: Qdrant only accepts an unsigned
 # integer or a UUID as a point id —
@@ -82,11 +84,10 @@ AUX_COLLECTIONS: dict[str, tuple[tuple[str | tuple[str, ...], dict[str, Any]], .
 #     400 ... value sch_delhi_... is not a valid point id, valid values are
 #           either an unsigned integer or a UUID
 #
-# so ARCHITECTURE §5.3.1's "Point ID = scheme_id (string)" cannot be
-# implemented literally.  We therefore mint a *deterministic* UUIDv5 from the
-# scheme_id (see `point_id`) and carry the real `scheme_id` in the payload as
-# the join key.  The payload remains a strict subset of Scheme — `scheme_id` is
-# a Scheme property — and Qdrant still holds nothing authoritative.
+# so the point id is `uuid5(NAMESPACE_DNS, scheme_id)` (ARCHITECTURE §5.3.1)
+# and the real `scheme_id` rides along in the payload as the join key.  The
+# payload remains a strict subset of Scheme — `scheme_id` is a Scheme property
+# — and Qdrant still holds nothing authoritative.
 QDRANT_FILTERABLE: tuple[str, ...] = (
     "domicile_state",
     "category",
@@ -119,13 +120,14 @@ QDRANT_FIELD_SCHEMA: dict[str, str] = {
 
 
 def point_id(scheme_id: str) -> str:
-    """Deterministic Qdrant point id for a ``scheme_id``.
+    """Deterministic Qdrant point id: ``uuid5(NAMESPACE_DNS, scheme_id)``.
 
-    ``uuid5`` over a fixed, version-controlled namespace, so every process on
-    every machine derives the same id — re-seeding overwrites the same point
-    instead of duplicating, and a point can be recomputed without a lookup
-    table (the inverse direction is not needed: ``scheme_id`` lives in the
-    payload).
+    Qdrant accepts only an unsigned integer or a UUID as a point id, so the
+    string ``scheme_id`` cannot be one.  ``uuid5`` over the well-known
+    ``NAMESPACE_DNS`` constant makes the mapping reproducible on every machine
+    with no lookup table — re-seeding overwrites the same point instead of
+    duplicating it.  The inverse is not needed: ``scheme_id`` itself travels
+    in the payload as the join key back to MongoDB (DATA_SPEC §3.3).
     """
     return str(uuid.uuid5(POINT_NAMESPACE, scheme_id))
 

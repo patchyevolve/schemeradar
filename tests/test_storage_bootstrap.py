@@ -59,6 +59,8 @@ def test_point_id_is_a_deterministic_uuid():
     assert first != point_id("sch_some_other_scheme")
     uuid.UUID(first)  # Qdrant accepts only int/UUID ids
     assert str(uuid.UUID(first)) == first
+    # Pin the namespace so code and ARCHITECTURE §5.3.1 cannot drift apart.
+    assert first == str(uuid.uuid5(uuid.NAMESPACE_DNS, sid))
 
 
 def test_projection_values_are_verbatim_from_the_canonical_scheme():
