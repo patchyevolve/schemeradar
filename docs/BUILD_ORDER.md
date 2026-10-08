@@ -167,7 +167,7 @@ Stand up the canonical data layer and prove the schema contract end-to-end **bef
 
 | # | Task | Notes |
 |---|------|-------|
-| 2.1 | Convert `docs/DATA_SPEC.md` §2.3 into the runtime JSON Schema artefact | **Verbatim** — 44 required fields, `additionalProperties: false`, 25 `$defs`. No hand-edits |
+| 2.1 | Convert `docs/DATA_SPEC.md` §2.3 into the runtime JSON Schema artefact | **Verbatim** — 44 required fields, `additionalProperties: false`, 26 `$defs`. No hand-edits |
 | 2.2 | Author Pydantic v2 models mirroring the schema exactly | The same models power the L1–L5 validation ladder in Step 3 |
 | 2.3 | Create indexes: MongoDB (unique `scheme_id`, `is_active`, `domicile_state`, `content_hash`) and Qdrant (`schemes`, 1024-dim, cosine) | Point ID = `scheme_id` |
 | 2.4 | Load the two canonical instances from DATA_SPEC §4.1 and §5.1 | `sch_delhi_post_matric_scholarship_sc_st_obc_2026`, `sch_pm_kisan_samman_nidhi_2019` |

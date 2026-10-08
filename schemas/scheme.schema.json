@@ -1,0 +1,1068 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.schemeradar.in/scheme.v1.json",
+  "title": "SchemeRadar Canonical Scheme",
+  "description": "Canonical welfare-scheme document. Source of truth in MongoDB collection 'schemes'; a subset becomes the Qdrant 'schemes' payload.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "scheme_id",
+    "slug",
+    "name",
+    "department",
+    "sponsoring_body",
+    "scheme_type",
+    "category",
+    "fiscal_year",
+    "status",
+    "is_active",
+    "index_state",
+    "min_age",
+    "max_age",
+    "gender",
+    "domicile_state",
+    "income_ceiling_annual",
+    "income_ceiling_scope",
+    "allowed_categories",
+    "requires_minority_flag",
+    "min_education_level",
+    "allowed_occupations",
+    "conditional_gate_overrides",
+    "domain_gates",
+    "soft_clauses",
+    "benefits",
+    "benefits_summary",
+    "benefits_total_value_annual",
+    "eligibility_text",
+    "required_documents",
+    "portal_url",
+    "application_mode",
+    "intake_window",
+    "verification_status",
+    "verified_at",
+    "extracted_deadline",
+    "snapshot_url",
+    "verification_job_id",
+    "last_known_status",
+    "source",
+    "parse",
+    "tags",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "scheme_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "pattern": "^sch_[a-z0-9]+(?:_[a-z0-9]+)*$",
+      "description": "Globally unique scheme identifier; also the Qdrant point ID."
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "maxLength": 160
+    },
+    "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 200
+    },
+    "name_hi": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 300,
+      "description": "Optional Hindi title for regional-language surfaces."
+    },
+    "department": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 240
+    },
+    "sponsoring_body": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 240
+    },
+    "scheme_type": {
+      "$ref": "#/$defs/SchemeType"
+    },
+    "category": {
+      "$ref": "#/$defs/WelfareCategory"
+    },
+    "fiscal_year": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}$"
+    },
+    "academic_year": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^\\d{4}-\\d{2}$",
+      "description": "Null for non-education schemes."
+    },
+    "status": {
+      "$ref": "#/$defs/SchemeStatus"
+    },
+    "is_active": {
+      "type": "boolean"
+    },
+    "index_state": {
+      "$ref": "#/$defs/IndexState",
+      "description": "Only 'indexed' records are upserted to Qdrant; 'pending_review' and 'fetch_unreachable' are excluded from search."
+    },
+    "min_age": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 120
+    },
+    "max_age": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 120
+    },
+    "gender": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Gender"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Set semantics. [\"ALL\"] means unrestricted."
+    },
+    "domicile_state": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SchemeStateCode"
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "Set semantics. [\"ALL\"] means pan-India."
+    },
+    "income_ceiling_annual": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100000000,
+      "description": "Inclusive annual ceiling in integer INR. null = not stated = unrestricted (flagged)."
+    },
+    "income_ceiling_scope": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "individual",
+        "household",
+        "family",
+        "beneficiary",
+        null
+      ],
+      "description": "Required (non-null) whenever income_ceiling_annual is non-null."
+    },
+    "allowed_categories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SocialCategory"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "requires_minority_flag": {
+      "type": "boolean"
+    },
+    "min_education_level": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EducationLevel"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "allowed_occupations": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+      },
+      "uniqueItems": true
+    },
+    "conditional_gate_overrides": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/GateOverride"
+      },
+      "default": [],
+      "description": "Category-specific specializations of a gate value (e.g. a stricter OBC income ceiling). Resolved BEFORE gate evaluation; see 2.6."
+    },
+    "domain_gates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DomainGate"
+      },
+      "default": [],
+      "description": "Scheme-specific arithmetic gates (e.g. landholding cap). Composes into S_det per 0.3."
+    },
+    "soft_clauses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SoftClause"
+      },
+      "description": "Non-arithmetic clauses judged by the LLM Semantic Auditor -> lambda_llm. Never affect S_det."
+    },
+    "benefits": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/Benefit"
+      }
+    },
+    "benefits_summary": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 400,
+      "description": "One-line human-readable monetary value; also stored in the Qdrant payload."
+    },
+    "benefits_total_value_annual": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "Sum of benefits[*].annual_value_inr when all are resolvable; null otherwise."
+    },
+    "eligibility_text": {
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 4000,
+      "description": "Flattened plain-language eligibility paragraph. Part of embed_text and bm25_text."
+    },
+    "required_documents": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RequiredDocument"
+      }
+    },
+    "portal_url": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://[^/]+\\.(gov\\.in|nic\\.in)(:\\d+)?(/.*)?$",
+      "description": "Government-domain allowlist (SSRF guard, Phase 1 8.3). Must be live-verifiable by Tier 3."
+    },
+    "alternate_urls": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uri"
+      },
+      "default": []
+    },
+    "application_mode": {
+      "$ref": "#/$defs/ApplicationMode"
+    },
+    "intake_window": {
+      "$ref": "#/$defs/IntakeWindow"
+    },
+    "verification_status": {
+      "$ref": "#/$defs/VerificationStatus"
+    },
+    "verified_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time",
+      "description": "Server-generated. UI may show a 'Verified' badge only when now - verified_at <= 60 minutes (Phase 1 G2)."
+    },
+    "extracted_deadline": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "snapshot_url": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 512,
+      "description": "Object-storage key snapshots/{scheme_id}/{job_id}.png; the API resolves it to a signed URL."
+    },
+    "verification_job_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 64
+    },
+    "last_known_status": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/VerificationStatus"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Populated only when the most recent Tier-3 run could not establish a live status."
+    },
+    "source": {
+      "$ref": "#/$defs/SourceRef"
+    },
+    "parse": {
+      "$ref": "#/$defs/ParseMeta"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 48
+      },
+      "uniqueItems": true,
+      "maxItems": 32
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "$defs": {
+    "SchemeType": {
+      "type": "string",
+      "enum": [
+        "scholarship",
+        "fee_reimbursement",
+        "direct_benefit_transfer",
+        "subsidy",
+        "healthcare",
+        "skill_development",
+        "employment",
+        "agriculture",
+        "housing",
+        "social_welfare",
+        "pension",
+        "insurance",
+        "food_subsidy",
+        "other"
+      ]
+    },
+    "WelfareCategory": {
+      "type": "string",
+      "enum": [
+        "education",
+        "agriculture",
+        "health",
+        "employment",
+        "housing",
+        "social_welfare",
+        "skill_development",
+        "finance",
+        "rural_development"
+      ]
+    },
+    "SocialCategory": {
+      "type": "string",
+      "enum": [
+        "GENERAL",
+        "OBC",
+        "SC",
+        "ST",
+        "EWS"
+      ]
+    },
+    "Gender": {
+      "type": "string",
+      "enum": [
+        "MALE",
+        "FEMALE",
+        "TRANSGENDER",
+        "ALL"
+      ]
+    },
+    "EducationLevel": {
+      "type": "string",
+      "enum": [
+        "below_10",
+        "10th",
+        "12th",
+        "diploma",
+        "bachelor_1st_year",
+        "bachelor",
+        "post_grad",
+        "phd"
+      ],
+      "description": "Ordered lattice (ascending). Used by gate g_education."
+    },
+    "StateCode": {
+      "type": "string",
+      "pattern": "^(AN|AP|AR|AS|BR|CH|CG|DH|DL|GA|GJ|HR|HP|JH|JK|KA|KL|LA|LD|MP|MH|ML|MZ|NL|OR|PB|PY|RJ|SK|TN|TS|TR|UP|UK|WB)$"
+    },
+    "SchemeStateCode": {
+      "anyOf": [
+        {
+          "const": "ALL"
+        },
+        {
+          "$ref": "#/$defs/StateCode"
+        }
+      ]
+    },
+    "SchemeStatus": {
+      "type": "string",
+      "enum": [
+        "active",
+        "closed",
+        "archived",
+        "superseded"
+      ]
+    },
+    "IndexState": {
+      "type": "string",
+      "enum": [
+        "indexed",
+        "pending_review",
+        "fetch_unreachable",
+        "superseded"
+      ],
+      "description": "Gating value for the Qdrant write step."
+    },
+    "VerificationStatus": {
+      "type": "string",
+      "enum": [
+        "INTAKE_OPEN",
+        "INTAKE_CLOSED",
+        "UNREACHABLE",
+        "BLOCKED",
+        "UNVERIFIED",
+        "PENDING"
+      ]
+    },
+    "CycleStatus": {
+      "type": "string",
+      "enum": [
+        "open",
+        "closed",
+        "upcoming",
+        "unknown"
+      ]
+    },
+    "ApplicationMode": {
+      "type": "string",
+      "enum": [
+        "online",
+        "offline",
+        "hybrid"
+      ]
+    },
+    "IntakeWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "opens_on",
+        "closes_on",
+        "cycle_status",
+        "source_note"
+      ],
+      "properties": {
+        "opens_on": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "closes_on": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "cycle_status": {
+          "$ref": "#/$defs/CycleStatus"
+        },
+        "source_note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      }
+    },
+    "BenefitType": {
+      "type": "string",
+      "enum": [
+        "tuition_reimbursement",
+        "maintenance_allowance",
+        "direct_cash_transfer",
+        "fee_waiver",
+        "equipment_subsidy",
+        "input_subsidy",
+        "insurance_cover",
+        "food_subsidy",
+        "housing_subsidy",
+        "toolkit_in_kind",
+        "pension"
+      ]
+    },
+    "BenefitBasis": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "actual_upto_cap",
+        "variable"
+      ]
+    },
+    "Frequency": {
+      "type": "string",
+      "enum": [
+        "one_time",
+        "monthly",
+        "quarterly",
+        "annual",
+        "per_academic_year",
+        "per_cycle"
+      ]
+    },
+    "DisbursementMode": {
+      "type": "string",
+      "enum": [
+        "dbt",
+        "institution_payable",
+        "reimbursement",
+        "in_kind"
+      ]
+    },
+    "Benefit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "benefit_id",
+        "benefit_type",
+        "description",
+        "basis",
+        "amount_inr",
+        "cap_amount_inr",
+        "annual_value_inr",
+        "frequency",
+        "disbursement_mode",
+        "installment_count",
+        "installment_amount_inr",
+        "eligibility_note"
+      ],
+      "properties": {
+        "benefit_id": {
+          "type": "string",
+          "pattern": "^ben_[a-z0-9_]+$"
+        },
+        "benefit_type": {
+          "$ref": "#/$defs/BenefitType"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 400
+        },
+        "basis": {
+          "$ref": "#/$defs/BenefitBasis"
+        },
+        "amount_inr": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cap_amount_inr": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "annual_value_inr": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "frequency": {
+          "$ref": "#/$defs/Frequency"
+        },
+        "disbursement_mode": {
+          "$ref": "#/$defs/DisbursementMode"
+        },
+        "installment_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 24
+        },
+        "installment_amount_inr": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "eligibility_note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        }
+      }
+    },
+    "DocumentTier": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "description": "0 = self-declaration/in-hand (0.00) ... 4 = long-lead third-party (0.25-0.35). See 2.5."
+    },
+    "RequiredDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "name",
+        "tier",
+        "penalty_per_document",
+        "requirement_weight",
+        "is_mandatory",
+        "issuance_authority",
+        "applies_when",
+        "alternatives",
+        "guide_url",
+        "notes"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "pattern": "^doc_[a-z0-9_]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "tier": {
+          "$ref": "#/$defs/DocumentTier"
+        },
+        "penalty_per_document": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 0.35,
+          "description": "p(d). Must fall inside its tier's declared range (cross-field invariant V-CF2)."
+        },
+        "requirement_weight": {
+          "type": "number",
+          "enum": [
+            0.0,
+            0.5,
+            1.0
+          ],
+          "description": "w_req. 1.0 = mandatory, charged in full when missing. 0.5 = charged at half weight because a substitute declared in alternatives[] provisionally discharges it (must be paired with a non-empty alternatives[]). 0.0 = recommended or non-mandatory, never penalised; also the correct value on a document that appears only as another document's alternative."
+        },
+        "is_mandatory": {
+          "type": "boolean"
+        },
+        "issuance_authority": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 200
+        },
+        "applies_when": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 200,
+          "description": "Profile predicate, e.g. \"social_category == 'OBC'\". null = always applies."
+        },
+        "alternatives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/DocAlternative"
+          },
+          "description": "Substitute documents. If the citizen holds one, the primary document is charged at p(d) * weight."
+        },
+        "guide_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "uri",
+          "pattern": "^https://[^/]+\\.(gov\\.in|nic\\.in)(:\\d+)?(/.*)?$"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 400
+        }
+      }
+    },
+    "DocAlternative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "policy",
+        "weight"
+      ],
+      "properties": {
+        "document_id": {
+          "type": "string",
+          "pattern": "^doc_[a-z0-9_]+$"
+        },
+        "policy": {
+          "type": "string",
+          "enum": [
+            "provisional",
+            "full"
+          ]
+        },
+        "weight": {
+          "type": "number",
+          "enum": [
+            0.0,
+            0.5
+          ],
+          "description": "Effective w_req applied to the PRIMARY document when this alternative is held. 0.0 = alternative fully discharges the requirement (primary excluded from M, Phase 1 6.4.2 row 2). 0.5 = partial discharge (charged_penalty = p(d) * 0.5, Phase 1 6.4.2 row 3)."
+        }
+      }
+    },
+    "GateOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "override_id",
+        "when",
+        "set"
+      ],
+      "properties": {
+        "override_id": {
+          "type": "string",
+          "pattern": "^ovr_[a-z0-9_]+$"
+        },
+        "when": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "social_category": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SocialCategory"
+              },
+              "minItems": 1
+            },
+            "gender": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Gender"
+              },
+              "minItems": 1
+            },
+            "domicile_state": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SchemeStateCode"
+              },
+              "minItems": 1
+            },
+            "education_level": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/EducationLevel"
+              },
+              "minItems": 1
+            }
+          }
+        },
+        "set": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "income_ceiling_annual": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "min_age": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 120
+            },
+            "max_age": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0,
+              "maximum": 120
+            },
+            "allowed_categories": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/SocialCategory"
+              },
+              "minItems": 1
+            },
+            "min_education_level": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/EducationLevel"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "allowed_occupations": {
+              "type": [
+                "array",
+                "null"
+              ],
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "DomainGate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_id",
+        "subject",
+        "operator",
+        "value",
+        "unit",
+        "description",
+        "on_missing_profile_fact"
+      ],
+      "properties": {
+        "rule_id": {
+          "type": "string",
+          "pattern": "^dg_[a-z0-9_]+$"
+        },
+        "subject": {
+          "type": "string",
+          "enum": [
+            "landholding_hectares",
+            "family_size",
+            "years_of_residence",
+            "disability_percentage",
+            "employment_tenure_years"
+          ]
+        },
+        "operator": {
+          "type": "string",
+          "enum": [
+            "eq",
+            "ne",
+            "lte",
+            "gte",
+            "lt",
+            "gt"
+          ]
+        },
+        "value": {
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "unit": {
+          "type": "string",
+          "enum": [
+            "hectare",
+            "person",
+            "year",
+            "percent"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 400
+        },
+        "on_missing_profile_fact": {
+          "type": "string",
+          "enum": [
+            "assume_unrestricted_flag",
+            "route_manual_review"
+          ],
+          "description": "Phase 1 6.2.1 null rule: null fact -> pass + assumed_unrestricted, or route for manual review."
+        }
+      }
+    },
+    "SoftClause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clause_id",
+        "text",
+        "source",
+        "mode"
+      ],
+      "properties": {
+        "clause_id": {
+          "type": "string",
+          "pattern": "^cl_[a-z0-9_]+$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 600
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 300
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "judge_only",
+            "judge_with_facts"
+          ],
+          "description": "judge_with_facts = the auditor may consult the profile to resolve the clause."
+        }
+      }
+    },
+    "SourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "discovered_by",
+        "first_seen_at",
+        "last_crawled_at",
+        "fetch_tier",
+        "content_hash",
+        "parser_version"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "discovered_by": {
+          "type": "string",
+          "enum": [
+            "tinyfish_search",
+            "manual",
+            "sitemap",
+            "rss"
+          ]
+        },
+        "first_seen_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "last_crawled_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "fetch_tier": {
+          "type": "string",
+          "enum": [
+            "tinyfish_fetch",
+            "sitemap",
+            "rss",
+            "direct"
+          ]
+        },
+        "content_hash": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "Idempotency key for the ingestion cycle (Phase 1 3.1)."
+        },
+        "parser_version": {
+          "type": "string",
+          "maxLength": 64
+        }
+      }
+    },
+    "ParseMeta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "parse_confidence",
+        "ocr_used",
+        "repair_attempts",
+        "review_reasons"
+      ],
+      "properties": {
+        "parse_confidence": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "ocr_used": {
+          "type": "boolean"
+        },
+        "repair_attempts": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "review_reasons": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

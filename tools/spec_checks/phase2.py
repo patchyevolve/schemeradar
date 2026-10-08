@@ -75,7 +75,37 @@ else:
 
 # consistency spot-checks vs Phase 1
 arch = (pathlib.Path(__file__).resolve().parents[2] / "docs" / "ARCHITECTURE.md").read_text()
+
+# ---- task 2.1: the runtime schema artefact must be a verbatim copy of DATA_SPEC §2.3 ----
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+ART = ROOT / "schemas" / "scheme.schema.json"
+art = None
+if ART.exists():
+    try:
+        art = json.loads(ART.read_text(encoding="utf-8"))
+        print(f"  PASS  runtime artefact present: {ART.relative_to(ROOT)}")
+    except Exception as e:
+        ok = False
+        print(f"  FAIL  runtime artefact is not valid JSON: {e}")
+else:
+    ok = False
+    print(f"  FAIL  runtime artefact missing: {ART.relative_to(ROOT)}")
+
+doc_defs = len(scheme_schema[1]["$defs"]) if scheme_schema else -1
+doc_req = len(scheme_schema[1]["required"]) if scheme_schema else -1
+
+build_order = (ROOT / "docs" / "BUILD_ORDER.md").read_text(encoding="utf-8")
+m = re.search(r"(\d+)\s+`?\$defs`?", build_order)
+bo_defs = int(m.group(1)) if m else -1
+print(f"  info  doc $defs={doc_defs} required={doc_req} | BUILD_ORDER claims $defs={bo_defs}")
+
 checks = [
+    ("artefact == DATA_SPEC 2.3 (verbatim, no hand-edits)",
+     art is not None and scheme_schema is not None and art == scheme_schema[1]),
+    ("44 required fields", doc_req == 44 and art is not None and len(art["required"]) == 44),
+    ("additionalProperties:false everywhere (artefact)",
+     art is not None and art.get("additionalProperties") is False),
+    ("BUILD_ORDER $defs claim matches DATA_SPEC", bo_defs == doc_defs),
     ("W_D = 0.60", "$W_D$ | 0.60" in arch),
     ("W_S = 0.40", "$W_S$ | 0.40" in arch),
     ("W_D/W_S echoed in DATA_SPEC", '"W_D": 0.60' in DOC and '"W_S": 0.40' in DOC),
