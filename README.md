@@ -294,6 +294,8 @@ Two canonical worked examples are carried verbatim through every document, with 
 
 > **Prerequisites:** Docker + Docker Compose, Python **3.14** (`python3 --version`), Node 20+ and `pnpm`, ~8 GB RAM for the embedding model.
 >
+> **Disk:** the pinned Python requirements pull the PyTorch + CUDA wheel stack — budget **~4 GB for `.venv`**. Keep the venv on a real disk, not a small `tmpfs` (installing it under `/tmp` on a tmpfs machine fails with `Errno 122: Disk quota exceeded`).
+>
 > Service ports below are **local development defaults** — they are not part of the frozen canonical constants.
 
 > **Build status** — this README is the *target* Quickstart. Each step is marked with where it stands today, so nothing here overpromises:
