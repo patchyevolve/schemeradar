@@ -20,3 +20,6 @@ yarn-error.log
 .vscode/
 .idea/
 .DS_Store
+
+# Build caches (never authoritative — rebuilt from MongoDB)
+cache/

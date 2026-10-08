@@ -15,13 +15,19 @@ tasks 2.3 / 2.6 / 2.8.
 
 from __future__ import annotations
 
+import uuid
 from typing import Any, Iterable, Mapping
 
 # --- frozen constants (ARCHITECTURE §5.3.1) --------------------------------
-# 1024-dim BAAI/bge-m3 embeddings, cosine distance.  The point id is the
-# canonical `scheme_id`, so a re-seed overwrites rather than duplicates.
+# 1024-dim BAAI/bge-m3 embeddings, cosine distance.  The point id is derived
+# deterministically from the canonical `scheme_id` (see `point_id`), so a
+# re-seed overwrites rather than duplicates.
 QDRANT_VECTOR_SIZE = 1024
 QDRANT_DISTANCE = "Cosine"
+
+# Namespace for `point_id`.  Anchored to the project's own URI so it never
+# collides with another uuid5 usage elsewhere.
+POINT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "https://schemeradar.in/")
 
 # --- task 2.3: MongoDB indexes on `schemes` --------------------------------
 # `scheme_id` is the natural key and therefore unique.  The other three are
@@ -67,8 +73,20 @@ AUX_COLLECTIONS: dict[str, tuple[tuple[str | tuple[str, ...], dict[str, Any]], .
 
 # --- task 2.6: Qdrant payload projection (DATA_SPEC §3.3) ------------------
 # The payload is a strict subset of the canonical Scheme; nothing in Qdrant
-# may be authoritative.  7 filterable + 5 stored = 12 keys, exactly as listed
-# in the §3.3 table.
+# may be authoritative.  §3.3 lists 7 filterable + 5 stored keys = 12; we add
+# `scheme_id` as the 13th so a hit can be joined back to MongoDB.
+#
+# WHY `scheme_id` has to be in the payload: Qdrant only accepts an unsigned
+# integer or a UUID as a point id —
+#
+#     400 ... value sch_delhi_... is not a valid point id, valid values are
+#           either an unsigned integer or a UUID
+#
+# so ARCHITECTURE §5.3.1's "Point ID = scheme_id (string)" cannot be
+# implemented literally.  We therefore mint a *deterministic* UUIDv5 from the
+# scheme_id (see `point_id`) and carry the real `scheme_id` in the payload as
+# the join key.  The payload remains a strict subset of Scheme — `scheme_id` is
+# a Scheme property — and Qdrant still holds nothing authoritative.
 QDRANT_FILTERABLE: tuple[str, ...] = (
     "domicile_state",
     "category",
@@ -85,7 +103,7 @@ QDRANT_STORED: tuple[str, ...] = (
     "max_age",
     "benefits_summary",
 )
-QDRANT_PAYLOAD_KEYS: tuple[str, ...] = QDRANT_FILTERABLE + QDRANT_STORED
+QDRANT_PAYLOAD_KEYS: tuple[str, ...] = ("scheme_id",) + QDRANT_FILTERABLE + QDRANT_STORED
 
 # Qdrant payload-index type per filterable field.  `domicile_state` is an
 # array of state codes, which Qdrant indexes multikey under a keyword schema.
@@ -98,6 +116,18 @@ QDRANT_FIELD_SCHEMA: dict[str, str] = {
     "is_active": "bool",
     "verification_status": "keyword",
 }
+
+
+def point_id(scheme_id: str) -> str:
+    """Deterministic Qdrant point id for a ``scheme_id``.
+
+    ``uuid5`` over a fixed, version-controlled namespace, so every process on
+    every machine derives the same id — re-seeding overwrites the same point
+    instead of duplicating, and a point can be recomputed without a lookup
+    table (the inverse direction is not needed: ``scheme_id`` lives in the
+    payload).
+    """
+    return str(uuid.uuid5(POINT_NAMESPACE, scheme_id))
 
 
 def project_qdrant_payload(scheme: Mapping[str, Any]) -> dict[str, Any]:

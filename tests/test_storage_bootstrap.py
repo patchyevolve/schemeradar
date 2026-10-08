@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import json
 import pathlib
+import uuid
 
 import pytest
 
 from services.api.storage import (
     AUX_COLLECTIONS,
     QDRANT_FIELD_SCHEMA,
+    QDRANT_FILTERABLE,
     QDRANT_PAYLOAD_KEYS,
+    QDRANT_STORED,
     project_qdrant_payload,
 )
 
@@ -30,12 +33,32 @@ def _seed() -> dict:
 # --- task 2.6: Qdrant payload projection (DATA_SPEC §3.3) -------------------
 
 
-def test_projection_is_exactly_the_section_33_key_set():
-    """7 filterable + 5 stored = 12 keys — no more, no less."""
+def test_projection_is_the_section_33_key_set_plus_the_scheme_id_join():
+    """7 filterable + 5 stored = 12 keys from §3.3, plus `scheme_id`.
+
+    `scheme_id` is added because Qdrant rejects a string point id (only
+    int/UUID), so the id itself can no longer carry the join key.  It is still
+    a strict subset of the canonical Scheme.
+    """
     payload = project_qdrant_payload(_seed())
     assert set(payload) == set(QDRANT_PAYLOAD_KEYS)
-    assert len(payload) == 12
+    assert len(payload) == 13
     assert len(QDRANT_PAYLOAD_KEYS) == len(set(QDRANT_PAYLOAD_KEYS))
+    assert set(payload) - {"scheme_id"} == (
+        set(QDRANT_FILTERABLE) | set(QDRANT_STORED)
+    )
+
+
+def test_point_id_is_a_deterministic_uuid():
+    from services.api.storage import point_id
+
+    seed = _seed()
+    sid = seed["scheme_id"]
+    first = point_id(sid)
+    assert first == point_id(sid), "must be stable across calls/machines"
+    assert first != point_id("sch_some_other_scheme")
+    uuid.UUID(first)  # Qdrant accepts only int/UUID ids
+    assert str(uuid.UUID(first)) == first
 
 
 def test_projection_values_are_verbatim_from_the_canonical_scheme():
@@ -50,7 +73,7 @@ def test_projection_drops_everything_else():
     scheme = _seed()
     payload = project_qdrant_payload(scheme)
     leaked = set(scheme) - set(payload)
-    assert len(scheme) == 47 and len(payload) == 12 and len(leaked) == 35
+    assert len(scheme) == 47 and len(payload) == 13 and len(leaked) == 34
     # None of the bulky/authoritative parts may reach the derived index.
     for forbidden in (
         "eligibility_text",
