@@ -129,12 +129,12 @@ Produce a runnable, empty skeleton where every later step has a home — and pro
 
 ### 3.4 Outputs / Definition of Done
 
-- [ ] `docker compose up -d` starts all three services, all report **healthy**
-- [ ] `python -m venv .venv` activates; `pip install -r services/api/requirements.txt` completes with zero errors
-- [ ] `pnpm install && pnpm dev` serves a placeholder page on `localhost:3000`
-- [ ] `uvicorn services.api.main:app --port 8000` serves `/docs` with an empty route table
-- [ ] `.env.example` documented; no real secret committed
-- [ ] **Gate G1** — a fresh clone reproduces all of the above from the README Quickstart, unedited
+- [x] `docker compose up -d` starts all three services, all report **healthy**
+- [x] `python -m venv .venv` activates; `pip install -r services/api/requirements.txt` completes with zero errors
+- [x] `pnpm install && pnpm dev` serves a placeholder page on `localhost:3000`
+- [x] `uvicorn services.api.main:app --port 8000` serves `/docs` with an empty route table
+- [x] `.env.example` documented; no real secret committed
+- [x] **Gate G1** — a fresh clone reproduces all of the above from the README Quickstart, unedited
 
 ### 3.5 Validation
 
@@ -182,10 +182,10 @@ Stand up the canonical data layer and prove the schema contract end-to-end **bef
 
 ### 4.4 Outputs / Definition of Done
 
-- [ ] Both canonical instances **validate against the JSON Schema** and all 12 cross-field invariants pass
+- [x] Both canonical instances **validate against the JSON Schema** and all 12 cross-field invariants pass
 - [ ] `POST /api/v1/profile/qualify` precursor (a local script) reproduces the published proofs: **0.887 / HIGH**, **0.688**, **0.988**
-- [ ] Qdrant returns both points on a filtered query; BM25 returns both on a lexical query (`"post matric"`, `"kisan"`)
-- [ ] `content_hash` unchanged ⇒ re-seed is a no-op
+- [x] Qdrant returns both points on a filtered query; BM25 returns both on a lexical query (`"post matric"`, `"kisan"`)
+- [x] `content_hash` unchanged ⇒ re-seed is a no-op
 - [ ] **Gate G2**
 
 ### 4.5 Validation
