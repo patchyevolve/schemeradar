@@ -1,0 +1,6 @@
+# Dependencies for the specification consistency suite (tools/spec_checks/).
+# Kept separate from services/api/requirements.txt on purpose: the spec checks
+# are stdlib-only except for JSON Schema validation, so CI can run them in
+# seconds instead of installing torch (~2 GB) for task 1.8.
+# Runtime consumers of the same schema use services/api/requirements.txt.
+jsonschema==4.26.0
