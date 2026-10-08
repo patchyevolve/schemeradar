@@ -29,7 +29,10 @@ services:
       start_period: 30s
 
   qdrant:
-    image: qdrant/qdrant:v1.12.4
+    # Must match the pinned `qdrant-client` in services/api/requirements.txt —
+    # the client refuses to talk to a server whose major version differs (it
+    # emits "incompatible with server version"). Client and server are both 1.19.1.
+    image: qdrant/qdrant:v1.19.1
     container_name: schemeradar-qdrant
     restart: unless-stopped
     ports:
