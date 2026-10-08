@@ -303,7 +303,7 @@ Two canonical worked examples are carried verbatim through every document, with 
 > | Step | Status |
 > |---|---|
 > | 1 Clone · 2 Docker infra · 3 venv · 4 `.env` · 6 API · 7 Dashboard | ✅ **Verified working** (Build Order Step 1) |
-> | 5 Create collections & seed | ⬜ Build Order Step 2 — `tools/seed.py` not written yet |
+> | 5 Create collections & seed | 🟡 **in progress** (Build Order Step 2) — done: runtime schema (`schemas/scheme.schema.json`), Pydantic ladder models (`services/api/models.py`, 33 tests), 2 seed instances (`seeds/`); not written yet: indexes (2.3), `tools/seed.py` (2.5), Qdrant payload projection (2.6), BM25 (2.7), aux collections (2.8) → Gate G2 |
 > | 8 Test suite | ⬜ Build Order Step 6 — `pytest` installed, acceptance tests not written yet |
 >
 > Frozen scope: architecture (`docs/ARCHITECTURE.md`), data model (`docs/DATA_SPEC.md`), workflow & tests (`docs/WORKFLOW_AND_TESTS.md`) and pitch deck (`docs/PPT_SUBMISSION.md`) are complete and CI-validated via `python -m tools.validate_specs`.

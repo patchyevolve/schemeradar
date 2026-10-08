@@ -25,6 +25,11 @@ rank-bm25==0.2.2
 # Validates Scheme documents against docs/DATA_SPEC.md §2.3 at ingestion time
 # (validation ladder L1) and backs tools/spec_checks/phase2.py in CI.
 jsonschema==4.26.0
+# jsonschema only registers `format: date-time` and `format: uri` checkers when
+# these are importable; without them DATA_SPEC §2.3's verified_at / created_at /
+# url format assertions are silently skipped by the L1 layer.
+rfc3339-validator==0.1.4
+rfc3986-validator==0.1.1
 
 # --- semantic layer ---------------------------------------------------------
 # BAAI/bge-m3 (1024-dim) is downloaded on first use, not at install time.

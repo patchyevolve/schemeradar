@@ -3,4 +3,9 @@
 # are stdlib-only except for JSON Schema validation, so CI can run them in
 # seconds instead of installing torch (~2 GB) for task 1.8.
 # Runtime consumers of the same schema use services/api/requirements.txt.
+#
+# rfc3339/rfc3986 unlock jsonschema's `format: date-time` and `format: uri`
+# checkers — without them DATA_SPEC §2.3 format assertions pass vacuously.
 jsonschema==4.26.0
+rfc3339-validator==0.1.4
+rfc3986-validator==0.1.1
