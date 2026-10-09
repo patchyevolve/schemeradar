@@ -12,7 +12,7 @@ centralises retries, rate limits, cost accounting and audit logging in one place
 Tier budgets (ARCHITECTURE §7.4 / §9, frozen):
     Tier 1 Search    <= 2,000 ms   ingestion discovery only
     Tier 2 Fetch     <= 8,000 ms   ingestion rendering only
-    Tier 3 Web Agent <= 4,000 ms per portal, concurrency 3, top-N 5, async
+    Tier 3 Web Agent <= 6,000 ms per portal, concurrency 3, top-N 5, async
 
 Core invariant: the eligibility answer never depends on TinyFish being up.
 Tier 3 down => UNVERIFIED + last-known status; scores are unaffected.

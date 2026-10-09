@@ -236,7 +236,7 @@ Implement the single façade `services/tinyfish/` with exactly three typed clien
 | 3.7 | **Tier 3 — `TinyFishWebAgentClient`**: the 18-step algorithm (WORKFLOW §2.3) | Oct 10–11 | Navigate → dismiss popups → detect **enabled** submit → parse/normalise dates → classify → snapshot → verdict |
 | 3.8 | Date parsing & normalisation (WORKFLOW §2.4) and the 9-row verdict precedence table (§2.5) | Oct 11 | First match wins |
 | 3.9 | Snapshot writer → `snapshots/{scheme_id}/{job_id}.png`, 90-day lifecycle, `verified_at` server-generated | Oct 11 | Immutable; signed URL issuance |
-| 3.10 | `verification_logs` insert on every run + budget enforcement (4,000 ms/portal, concurrency 3) | Oct 11 | |
+| 3.10 | `verification_logs` insert on every run + budget enforcement (6,000 ms/portal, concurrency 3) | Oct 11 | |
 | 3.11 | Degradation fallbacks for all three tiers (Phase 1 §8.2) | Oct 11 | Tier 3 down ⇒ `UNVERIFIED` + last-known |
 
 ### 5.3 Inputs
@@ -269,7 +269,7 @@ Implement the single façade `services/tinyfish/` with exactly three typed clien
 | Risk | Mitigation | Contingency |
 |---|---|---|
 | Target portal blocks cloud browsers (WAF/captcha) | Classify per the verdict table rather than fighting the WAF | Ship with `UNREACHABLE`/`BLOCKED` honestly displayed — **it still scores points for integrity** |
-| Tier-3 latency blows the 4,000 ms budget | Hard timeout at 4,000 ms; verify only top-5, concurrency 3 | Verified payload degrades to 6,000 ms→`PENDING` badge, never blocks sync |
+| Tier-3 latency blows the 6,000 ms budget | Hard timeout at 6,000 ms; verify only top-5, concurrency 3 | Verified payload degrades to 6,000 ms→`PENDING` badge, never blocks sync |
 | LLM parser hallucinates enum values | L2 enum whitelist + fail-closed | Use the two canonical examples as golden fixtures |
 | Oct 11 slips | **Cut scope from here, not from Step 6** | Ship Tier 1+2 complete, Tier 3 with a reduced portal set |
 

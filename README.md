@@ -215,7 +215,7 @@ TinyFish is the system's **only** window onto the government web. A single inter
 |------|--------|-------------------|---------|--------|
 | **1 — Search** | `TinyFishSearchClient` | `POST api.search.tinyfish.ai` | **Discovery.** Find newly notified gazettes, circulars and portal announcements that standard engines index poorly or late. Feeds the ingestion pipeline **only** — never the citizen query path. | ≤ 2,000 ms |
 | **2 — Fetch** | `TinyFishFetchClient` | `POST api.fetch.tinyfish.ai` | **Dynamic rendering.** Render the ASP.NET postbacks, JS tables and session forms that kill ordinary scrapers; return clean Markdown for schema-enforced parsing. | ≤ 8,000 ms |
-| **3 — Web Agent** | `TinyFishWebAgentClient` | CDP / Playwright cloud browser | **Live verification.** Per-citizen-query proof that a link is actionable *right now*. | ≤ 4,000 ms per portal, concurrency 3 |
+| **3 — Web Agent** | `TinyFishWebAgentClient` | CDP / Playwright cloud browser | **Live verification.** Per-citizen-query proof that a link is actionable *right now*. | ≤ 6,000 ms per portal, concurrency 3 |
 
 ### Tier 1 — Search (Discovery)
 
@@ -304,7 +304,7 @@ Two canonical worked examples are carried verbatim through every document, with 
 > |---|---|
 > | 1 Clone · 2 Docker infra · 3 venv · 4 `.env` · 6 API · 7 Dashboard | ✅ **Verified working** (Build Order Step 1) |
 > | 5 Create collections & seed | ✅ **Verified working** (Build Order Step 2) — **Gate G2 locked**: schema contract, storage + indexes, idempotent seed, filtered Qdrant and BM25 recall. Score proofs (0.887 / 0.688 / 0.988) land with Step 4, Gate G4 |
-> | Tier 1–3 gateway + live portal verification (`services/tinyfish/`) | ✅ **Verified working** (Build Order Step 3) — **153** mocked tests · `python -m tools.validate_specs` **4/4** (now including the Step-3 boundary lint) · **5 live `gov.in` portals, 5/5 matching the §2.5 precedence table**, each writing a retrievable MinIO snapshot **and** a `verification_logs` row. Live verdicts: `INTAKE_OPEN` ×3 · `BLOCKED` (WAF) ×1 · `UNREACHABLE` (frozen 4,000 ms budget) ×1. *Gate G3's "Tier 3 disabled ⇒ scoring unaffected" half lands with Step 4, which builds the scoring engine.* |
+> | Tier 1–3 gateway + live portal verification (`services/tinyfish/`) | ✅ **Verified working** (Build Order Step 3) — **160** mocked tests · `python -m tools.validate_specs` **4/4** (now including the Step-3 boundary lint) · **5 live `gov.in` portals, 5/5 matching the §2.5 precedence table**, each writing a MinIO snapshot under a **90-day bucket lifecycle rule** plus a `verification_logs` row — the stored reference is durable and never expires, and reads are served with a **1-hour presigned `GET`**. Live verdicts: `INTAKE_OPEN` ×3 · `BLOCKED` (WAF) ×1 · `UNREACHABLE` (frozen 6,000 ms budget) ×1. *Gate G3's "Tier 3 disabled ⇒ scoring unaffected" half lands with Step 4, which builds the scoring engine.* |
 > | 8 Test suite | ⬜ Build Order Step 6 — `pytest` installed, acceptance tests not written yet |
 >
 > Frozen scope: architecture (`docs/ARCHITECTURE.md`), data model (`docs/DATA_SPEC.md`), workflow & tests (`docs/WORKFLOW_AND_TESTS.md`) and pitch deck (`docs/PPT_SUBMISSION.md`) are complete and CI-validated via `python -m tools.validate_specs`.

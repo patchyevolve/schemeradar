@@ -1630,7 +1630,7 @@ FUNCTION ParseScheme(fetch_result):
 | `extracted_deadline` | date \| null | ISO-8601 after normalisation |
 | `observed_signals` | string[] | e.g. `["submit_control_enabled", "deadline_text_found", "notice_popup_dismissed"]` |
 | `snapshot_key` | string \| null | `snapshots/{scheme_id}/{verification_job_id}.png` |
-| `duration_ms` | integer | Budget check (≤ 4,000 ms) |
+| `duration_ms` | integer | Budget check (≤ 6,000 ms) |
 | `agent_version` | string | CDP/Playwright agent version |
 | `error_class` | string \| null | `timeout`, `captcha`, `waf_block`, `http_5xx`, `dns_failure` |
 | `started_at` / `finished_at` | date-time | Server-generated |

@@ -96,7 +96,7 @@ pairs = [
     ("0.787", P3, P4), ("60,000", P2, P4), ("48,000", P2, P4), ("12,000", P2, P4),
     ("2,50,000", P2, P4), ("1,00,000", P2, P4), ("1,05,000", P2, P4), ("2,55,000", P3, P4),
     ("1,200 ms", P1, P4), ("6,000 ms", P1, P4), ("2,000 ms", P1, P4),
-    ("8,000 ms", P1, P4), ("4,000 ms", P1, P4), ("60 minutes", P1, P4),
+    ("8,000 ms", P1, P4), ("≤ 6,000 ms", P1, P4), ("60 minutes", P1, P4),
     ("0.75", P1, P4), ("1024", P1, P4), ("sch_delhi_post_matric_scholarship_sc_st_obc_2026", P2, P4),
     ("sch_pm_kisan_samman_nidhi_2019", P2, P4),
     ("sch_delhi_post_matric_scholarship_sc_st_obc_2026", P2, P4),

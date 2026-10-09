@@ -2,7 +2,7 @@
 
 WORKFLOW §2.1: the browser agent emits one status string per algorithm step
 and finishes on the verdict, so the frontend can paint a live progress badge
-while the 4,000 ms Tier-3 budget runs.  Each step is flushed as an SSE frame:
+while the 6,000 ms Tier-3 budget runs.  Each step is flushed as an SSE frame:
 
     data: {"scheme_id": "...", "job_id": "...", "status": "navigating"}
 
@@ -38,7 +38,8 @@ from services.tinyfish.agent import (
 logger = logging.getLogger("schemeradar.api.verify")
 router = APIRouter(prefix="/api/v1", tags=["verification"])
 
-__all__ = ["router", "make_agent", "get_db", "portal_url_for", "sse"]
+__all__ = ["router", "make_agent", "get_db", "portal_url_for", "sse",
+           "sign_snapshot_url"]
 
 # Patchable indirection — tests swap this instead of monkeypatching Playwright.
 make_agent: Any = TinyFishWebAgentClient
@@ -84,6 +85,32 @@ def sse(payload: dict[str, Any]) -> bytes:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
 
 
+def sign_snapshot_url(snapshot_url: str | None, *, expires_in: int = 3600) -> str | None:
+    """Build Order 3.9 — issue a short-lived signed ``GET`` for a snapshot.
+
+    Two lifetimes meet at this function:
+
+    * what the agent already persisted (``Scheme.snapshot_url``, written before
+      this frame exists) is a **durable** object reference and never expires;
+    * what the browser receives is a **credential** minted here, at read time,
+      with an hour of validity — signing is pure computation, so it costs no
+      round trip and nothing expiring is ever stored.
+
+    A signing failure must not break the stream: fall back to the durable
+    reference rather than dropping the evidence from the response.
+    """
+    if not snapshot_url:
+        return None
+    try:
+        from services.tinyfish.agent import SnapshotStore
+
+        signed = SnapshotStore().generate_snapshot_url(snapshot_url, expires_in=expires_in)
+    except Exception:  # noqa: BLE001 — evidence path must never break SSE
+        logger.warning("snapshot url signing failed", exc_info=True)
+        return snapshot_url
+    return signed or snapshot_url
+
+
 @router.get(
     "/verify/stream/{scheme_id}",
     summary="Live Tier-3 portal verification (SSE)",
@@ -122,7 +149,7 @@ async def verify_stream(scheme_id: str) -> StreamingResponse:
                                     item.extracted_deadline.isoformat()
                                     if item.extracted_deadline else None
                                 ),
-                                "snapshot_url": item.snapshot_url,
+                                "snapshot_url": sign_snapshot_url(item.snapshot_url),
                                 "final_url": item.final_url,
                                 "observed_signals": item.observed_signals,
                                 "error_class": item.error_class,

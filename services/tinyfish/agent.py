@@ -24,6 +24,7 @@ algorithm with zero Playwright processes and zero MinIO requests.
 
 from __future__ import annotations
 
+import base64
 import calendar
 import hashlib
 import hmac
@@ -33,6 +34,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from typing import Any, AsyncIterator, Awaitable, Callable, Sequence
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -53,6 +55,25 @@ USER_AGENT = (
 NAVIGATE_IDLE_WAIT_MS = 1_200         # NAVIGATE_IDLE_WAIT_MS — §2.3 step 3
 DISMISS_MAX_ATTEMPTS = 5              # POPUP_DISMISS_MAX_ATTEMPTS — §2.3 step 5
 DISMISS_BUDGET_MS = 800               # POPUP_DISMISS_BUDGET_MS — §2.3 step 5
+# Build Order 3.9 / ARCHITECTURE §7.3 "Evidence": snapshots expire after 90
+# days.  The rule is a bucket *lifecycle configuration* scoped to the
+# `snapshots/` prefix, so nothing else in the bucket is touched.
+SNAPSHOT_PREFIX = "snapshots/"
+SNAPSHOT_RETENTION_DAYS = 90
+SNAPSHOT_LIFECYCLE_RULE_ID = "expire-snapshots-90d"
+SNAPSHOT_LIFECYCLE_XML = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    "<LifecycleConfiguration>\n"
+    "  <Rule>\n"
+    f"    <ID>{SNAPSHOT_LIFECYCLE_RULE_ID}</ID>\n"
+    "    <Status>Enabled</Status>\n"
+    f"    <Filter><Prefix>{SNAPSHOT_PREFIX}</Prefix></Filter>\n"
+    f"    <Expiration><Days>{SNAPSHOT_RETENTION_DAYS}</Days></Expiration>\n"
+    "  </Rule>\n"
+    "</LifecycleConfiguration>"
+)
+# Presigned GET lifetime for a snapshot link handed to the browser (§7.3).
+SNAPSHOT_URL_TTL_SECONDS = 3_600
 DEADLINE_CANDIDATES = 20              # DEADLINE_CANDIDATE_LIMIT — §2.3 step 9
 AGENT_VERSION = "0.1.0"               # DATA_SPEC §8.1 `agent_version`
 INTAKE_STATUSES = frozenset({"INTAKE_OPEN", "INTAKE_CLOSED"})
@@ -378,11 +399,22 @@ def _sign(key: bytes, msg: str) -> bytes:
 class SnapshotStore:
     """PUT ``snapshots/{scheme_id}/{job_id}.png`` into the MinIO bucket.
 
-    Implements just enough AWS SigV4 for ``PutObject``/``CreateBucket`` so
-    Step 3 does not need ``boto3``.  ``put`` returns ``None`` on any failure —
+    Implements just enough AWS SigV4 for ``PutObject``/``CreateBucket``/
+    ``PutBucketLifecycleConfiguration`` and for **presigned GET** so Step 3
+    does not need ``boto3``.  ``put`` returns ``None`` on any failure —
     WORKFLOW §2.3 step 13: a snapshot is evidence, never the decision input,
     so a failed upload emits ``snapshot_failed`` and does **not** change the
     verdict.
+
+    Two independent guarantees back the evidence (Build Order 3.9):
+
+    * **90-day retention** — :meth:`ensure_lifecycle` installs an S3 lifecycle
+      rule that expires the ``snapshots/`` prefix; :meth:`ensure_ready` runs it
+      (once per instance) ahead of the first write.
+    * **Signed reads** — :meth:`generate_snapshot_url` mints a short-lived
+      presigned ``GET`` for a snapshot key.  What is *stored* (Mongo,
+      ``verification_logs``) stays a durable, non-expiring object reference;
+      the expiring credential is issued at read time and never persisted.
 
     Credentials come from ``Settings`` (which reads ``.env``), not from
     ``os.environ`` — pydantic-settings never re-exports what it parses.
@@ -409,6 +441,7 @@ class SnapshotStore:
         )
         self.region = region
         self._http = http
+        self._ready = False      # bucket + lifecycle installed (once per instance)
 
     # -- SigV4 -------------------------------------------------------------
     @property
@@ -416,8 +449,39 @@ class SnapshotStore:
         m = re.match(r"^(https?)://([^/]+)(/.*)?$", self.endpoint)
         return (m.group(1), m.group(2)) if m else None
 
+    @staticmethod
+    def _split(path: str) -> tuple[str, str]:
+        """``/bucket/key?lifecycle`` -> ``("/bucket/key", "lifecycle")``."""
+        canon_path, _, raw_query = path.partition("?")
+        return canon_path, raw_query
+
+    @staticmethod
+    def _canonical_query(raw_query: str) -> str:
+        """SigV4 canonical query string: URI-encode, sort by (key, value), join.
+
+        Input is the *raw* (unencoded) query; the output is both what gets
+        signed and what is sent, so the two can never drift apart.  A bare
+        ``?lifecycle`` (value-less parameter) canonicalises to ``lifecycle=``,
+        which is how S3 spells an empty value.
+        """
+        if not raw_query:
+            return ""
+        pairs: list[tuple[str, str]] = []
+        for part in raw_query.split("&"):
+            if not part:
+                continue
+            k, _, v = part.partition("=")
+            pairs.append((quote(k, safe="-_.~"), quote(v, safe="-_.~")))
+        pairs.sort()
+        return "&".join(f"{k}={v}" for k, v in pairs)
+
     def _signed_headers(
-        self, method: str, path: str, payload_hash: str, content_type: str | None
+        self,
+        method: str,
+        path: str,
+        payload_hash: str,
+        content_type: str | None,
+        extra: dict[str, str] | None = None,
     ) -> dict[str, str]:
         """Build the SigV4 ``Authorization`` header for one request."""
         now = datetime.now(timezone.utc)
@@ -426,6 +490,8 @@ class SnapshotStore:
         parts = self._parts
         assert parts is not None
         host = parts[1]
+        canon_path, raw_query = self._split(path)
+        canon_query = self._canonical_query(raw_query)
         canon: dict[str, str] = {
             "host": host,
             "x-amz-content-sha256": payload_hash,
@@ -433,11 +499,15 @@ class SnapshotStore:
         }
         if content_type:
             canon["content-type"] = content_type
+        if extra:
+            # Lowercased: SigV4 canonical header names are always lowercase, and
+            # HTTP/1.1 header names are case-insensitive on the wire.
+            canon.update({k.lower(): v for k, v in extra.items()})
         keys = sorted(canon)
         signed_headers = ";".join(keys)
         canonical_headers = "".join(f"{k}:{canon[k]}\n" for k in keys)
         canonical = (
-            f"{method}\n{path}\n\n{canonical_headers}\n"
+            f"{method}\n{canon_path}\n{canon_query}\n{canonical_headers}\n"
             f"{signed_headers}\n{payload_hash}"
         )
         scope = f"{date_stamp}/{self.region}/s3/aws4_request"
@@ -466,17 +536,26 @@ class SnapshotStore:
         path: str,
         content: bytes,
         content_type: str | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> httpx.Response:
         parts = self._parts
         assert parts is not None
         payload_hash = hashlib.sha256(content).hexdigest()
-        headers = self._signed_headers(method, path, payload_hash, content_type)
+        headers = self._signed_headers(
+            method, path, payload_hash, content_type, extra_headers
+        )
+        # Rebuild the URL from the canonical path/query so the wire form is
+        # byte-identical to what was signed (a `?lifecycle` becomes
+        # `?lifecycle=` — same parameter, canonical spelling).
+        canon_path, raw_query = self._split(path)
+        canon_query = self._canonical_query(raw_query)
+        url = f"{parts[0]}://{parts[1]}{canon_path}"
+        if canon_query:
+            url = f"{url}?{canon_query}"
         owns = self._http is None
         client = self._http or _async_http()
         try:
-            return await client.request(
-                method, f"{parts[0]}://{parts[1]}{path}", content=content, headers=headers
-            )
+            return await client.request(method, url, content=content, headers=headers)
         finally:
             if owns:
                 await client.aclose()
@@ -499,10 +578,131 @@ class SnapshotStore:
             )
         return ok
 
+    async def ensure_lifecycle(self) -> bool:
+        """Install the 90-day expiry rule on the ``snapshots/`` prefix.
+
+        ``PUT /{bucket}?lifecycle`` with a one-rule configuration
+        (ARCHITECTURE §7.3 "Evidence", Build Order 3.9).  Scope is the
+        ``snapshots/`` prefix, so no other object in the bucket is affected.
+        """
+        if not self.access_key or not self.secret_key or not self._parts:
+            return False
+        body = SNAPSHOT_LIFECYCLE_XML.encode("utf-8")
+        # MinIO/S3 require an integrity header on this particular operation
+        # (`MissingContentMD5` otherwise) — discovered against a live server,
+        # not in a mock.
+        content_md5 = base64.b64encode(
+            hashlib.md5(body, usedforsecurity=False).digest()
+        ).decode("ascii")
+        try:
+            resp = await self._send(
+                "PUT", f"/{self.bucket}?lifecycle", body, "application/xml",
+                {"Content-MD5": content_md5},
+            )
+        except Exception as exc:  # noqa: BLE001 — evidence path must not raise
+            logger.warning("snapshot lifecycle configure failed: %s", exc)
+            return False
+        ok = resp.status_code in (200, 204)
+        if not ok:
+            logger.warning(
+                "snapshot lifecycle configure failed: HTTP %s %s",
+                resp.status_code, resp.text[:200],
+            )
+        return ok
+
+    async def ensure_ready(self) -> bool:
+        """Bucket + lifecycle, attempted once per store instance.
+
+        Best-effort: a failure is logged and the caller still attempts its
+        write, because losing the 90-day rule must never cost us the evidence
+        of a run that actually happened.
+        """
+        if self._ready:
+            return True
+        if not self.access_key or not self.secret_key or not self._parts:
+            return False
+        bucket_ok = await self.ensure_bucket()
+        lifecycle_ok = await self.ensure_lifecycle()
+        self._ready = bucket_ok and lifecycle_ok
+        return self._ready
+
+    def generate_snapshot_url(
+        self, snapshot_key: str, expires_in: int = SNAPSHOT_URL_TTL_SECONDS
+    ) -> str | None:
+        """Mint a presigned ``GET`` for a snapshot (Build Order 3.9).
+
+        Accepts either the stored key form (``snapshots/{scheme}/{job}.png`` —
+        DATA_SPEC §6) **or** a full object URL (``Scheme.snapshot_url``), so the
+        caller never has to parse what it already holds.
+
+        Query-string authentication (SigV4, ``UNSIGNED-PAYLOAD``): the URL is
+        self-contained and needs no session cookie, and signing is pure
+        computation — no network — which is what makes it safe to mint per
+        response instead of persisting an expiring credential.  When given a
+        full URL its own authority and path are signed verbatim, so the durable
+        reference in Mongo is never rewritten or re-pointed.
+        """
+        if not self.access_key or not self.secret_key or not self._parts:
+            return None
+        target = self._resolve(snapshot_key)
+        if target is None:
+            return None
+        base, canon_uri = target
+        host = base.split("://", 1)[1]
+        now = datetime.now(timezone.utc)
+        amz_date = now.strftime("%Y%m%dT%H%M%SZ")
+        date_stamp = now.strftime("%Y%m%d")
+        scope = f"{date_stamp}/{self.region}/s3/aws4_request"
+        params: list[tuple[str, str]] = [
+            ("X-Amz-Algorithm", "AWS4-HMAC-SHA256"),
+            ("X-Amz-Credential", f"{self.access_key}/{scope}"),
+            ("X-Amz-Date", amz_date),
+            ("X-Amz-Expires", str(int(expires_in))),
+            ("X-Amz-SignedHeaders", "host"),
+        ]
+        canon_query = self._canonical_query(
+            "&".join(f"{k}={v}" for k, v in params)
+        )
+        canonical = (
+            f"GET\n{canon_uri}\n{canon_query}\nhost:{host}\n\n"
+            f"host\nUNSIGNED-PAYLOAD"
+        )
+        to_sign = (
+            "AWS4-HMAC-SHA256\n" + amz_date + "\n" + scope + "\n" +
+            hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        )
+        k = _sign(("AWS4" + self.secret_key).encode(), date_stamp)
+        k = _sign(k, self.region)
+        k = _sign(k, "s3")
+        k = _sign(k, "aws4_request")
+        signature = hmac.new(k, to_sign.encode(), hashlib.sha256).hexdigest()
+        return f"{base}{canon_uri}?{canon_query}&X-Amz-Signature={signature}"
+
+    def _resolve(self, value: str) -> tuple[str, str] | None:
+        """``(base_url, canonical_uri)`` for a key or a full object URL."""
+        v = (value or "").strip()
+        if not v:
+            return None
+        if "://" in v:
+            m = re.match(r"^(https?://[^/?#]+)(/.*)?$", v)
+            if not m:
+                return None
+            # A real URL: sign its authority and path exactly as stored.
+            return m.group(1), (m.group(2) or "/")
+        if not self._parts:
+            return None
+        scheme, host = self._parts
+        key = quote(v.lstrip("/"), safe="/-_.~")
+        prefix = f"{self.bucket}/"
+        if not key.startswith(prefix):
+            key = prefix + key
+        return f"{scheme}://{host}", f"/{key}"
+
     async def put(self, key: str, data: bytes, content_type: str = "image/png") -> str | None:
         """Upload and return the object URL, or ``None`` on failure."""
         if not self.access_key or not self.secret_key or not self._parts:
             return None
+        await self.ensure_ready()          # bucket + 90-day rule, once per store
         path = f"/{self.bucket}/{key.lstrip('/')}"
         url = f"{self.endpoint}{path}"
         try:
@@ -697,7 +897,7 @@ class TinyFishWebAgentClient:
                     retryable: str | None = None
                     try:
                         # Phase 1 §7.3 / §2.1: the Tier-3 budget is a HARD
-                        # 4,000 ms per portal, not a per-step hint — spend only
+                        # 6,000 ms per portal, not a per-step hint — spend only
                         # what is left of it, so a slow portal fails as a
                         # timeout instead of quietly blowing the budget.
                         goto_budget = max(1, self.timeout_ms - elapsed_ms())
@@ -814,9 +1014,9 @@ class TinyFishWebAgentClient:
             yield "persisting_result"
             duration_ms = int((time.perf_counter() - started) * 1000)
 
-            # §2.3 step 18 + §2.7 Edge Case C3 ("overall timeout") + TC-C8:
+            # §2.3 step 14a + §2.7 Edge Case C3 ("overall timeout") + TC-C8:
             # the job ALWAYS completes and is always persisted, but a run past
-            # the frozen Tier-3 budget (Phase 1 §7.3, 4,000 ms) is reported as
+            # the frozen Tier-3 budget (Phase 1 §7.3, 6,000 ms) is reported as
             # UNREACHABLE with error_class=timeout and logged as over-budget.
             # The breach is a metric — there is no catalog signal for it, and
             # a run that already failed for a *specific* reason (dns_failure,

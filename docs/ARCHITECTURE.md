@@ -226,7 +226,7 @@ flowchart TD
 | Deterministic evaluation | Profile + `Scheme` gates | `S_det`, `gate_trace[]`, `near_miss` flag | ≤ 50 ms for 30 candidates |
 | LLM semantic audit | Top-10 candidate snippets + profile | `λ_llm` per candidate | ≤ 900 ms (batched) |
 | Penalty + assembly | Gates, `S_sem`, `required_documents[]` | Final `Score`, band, checklist | ≤ 20 ms |
-| **Tier 3 verification** | `portal_url` | `verification_status`, `extracted_deadline`, `snapshot_url` | ≤ 4,000 ms per portal (async) |
+| **Tier 3 verification** | `portal_url` | `verification_status`, `extracted_deadline`, `snapshot_url` | ≤ 6,000 ms per portal (async) |
 
 ---
 
@@ -641,9 +641,9 @@ flowchart LR
 | **Target web patterns** | State application portals (Delhi e-District, Haryana Antyodaya-SARAL, National Scholarship Portal, state labor welfare boards) with: static **notice popups / modals** that must be dismissed; `__doPostBack` submit buttons that only enable when intake is open; date strings in mixed formats (`31-03-2026`, `31/03/2026`, `"Last date: 31st March 2026"`); session-locked forms; Cloudflare/WAF challenges; captcha-gated steps; maintenance/5xx outages. |
 | **Verification algorithm (summary)** | See Phase 3 `docs/WORKFLOW_AND_TESTS.md` for the full step-by-step agent algorithm. Core steps: (1) navigate, (2) dismiss popups, (3) detect an *enabled* submit/apply control, (4) parse closing-date strings & normalize to ISO-8601, (5) classify outage/captcha/blocked, (6) viewport snapshot, (7) emit status. |
 | **Emitted statuses** | `INTAKE_OPEN` · `INTAKE_CLOSED` · `UNREACHABLE` · `BLOCKED` (captcha/WAF) · `PENDING` (not yet run) → normalized to `verification_status` with `UNVERIFIED` fallback. |
-| **Latency budget** | **≤ 4,000 ms per portal** (hard timeout), async, off the critical path. Top-5 verified in parallel with a concurrency cap of 3 browsers. |
+| **Latency budget** | **≤ 6,000 ms per portal** (hard timeout), async, off the critical path. Top-5 verified in parallel with a concurrency cap of 3 browsers. The per-portal timeout is a *browser-pool* guard (never let one portal hog a concurrency slot); the *citizen-facing* bound is the §8.1 verified-payload deadline, which truncates the stream with a `PENDING` badge instead of waiting. |
 | **Fallback ladder** | (a) Timeout/failure → serve `verification_status = UNVERIFIED` with `last_known_status` + `last_verified_at` from `verification_logs`; (b) never block or fail the sync eligibility response; (c) never display a "Verified" badge without a `verified_at` inside the 60-minute freshness window (G2). |
-| **Evidence** | Viewport snapshot written to Object Storage at `snapshots/{scheme_id}/{job_id}.png`, URL stored in `verification_logs` (90-day lifecycle). |
+| **Evidence** | Viewport snapshot written to Object Storage at `snapshots/{scheme_id}/{job_id}.png`. What is stored — `verification_logs.snapshot_key` and `Scheme.snapshot_url` — is a **durable object reference that never expires**; it is never a credential. Reads are served with a presigned `GET` (SigV4 query auth, 1 h) minted at response time, and a bucket lifecycle rule expires the `snapshots/` prefix after **90 days**. |
 
 ### 7.4 Tier Summary Matrix
 
@@ -653,7 +653,7 @@ flowchart LR
 | **Primary purpose** | *Discover* unknown schemes | *Render & extract* page content | *Verify* live application status |
 | **Pipeline** | Ingestion (§3) | Ingestion (§3) | Citizen query (§4) + re-verify cron |
 | **Trigger** | Scheduled / admin | Queue-driven | Per-query (top-5) + freshness cron |
-| **Latency budget** | ≤ 2,000 ms | ≤ 8,000 ms | ≤ 4,000 ms |
+| **Latency budget** | ≤ 2,000 ms | ≤ 8,000 ms | ≤ 6,000 ms |
 | **On the citizen request path?** | No | No | Async only (SSE) |
 | **On failure** | Degrade to sitemap/RSS polling | `fetch_unreachable`, block index write | `UNVERIFIED` + last-known status |
 | **Target patterns** | Gazettes, circulars, announcements | ASP.NET postbacks, JS tables, session forms | Live portals, popups, submit controls, captcha |
@@ -667,7 +667,7 @@ flowchart LR
 | Path | Stage sum | Budget |
 |------|-----------|--------|
 | **Sync eligibility response** | validation 20 + dense 120 + sparse 40 + fusion 10 + rules 50 + LLM audit 900 + assembly 20 | **≤ 1,200 ms** |
-| **Verified payload (streamed)** | sync 1,200 + Tier-3 verification 4,000 + merge/SSE 800 | **≤ 6,000 ms** |
+| **Verified payload (streamed)** | sync 1,200 + Tier-3 verification (streamed async; per-portal hard cap 6,000 ms, SSE deadline truncates with `PENDING`) + merge/SSE 800 | **≤ 6,000 ms** |
 | **Ingestion (per scheme, async)** | Search 2,000 + Fetch 8,000 + OCR + LLM parse 6,000 + embed 300 + upsert 200 | **≤ 20,000 ms** (pipeline parallelized across candidates) |
 
 ### 8.2 Reliability & Degradation Matrix
@@ -723,7 +723,7 @@ Structured logs with `trace_id` spanning: gateway → retrieval → scoring → 
 | Verification freshness window | — | 60 minutes | G2 / UI badge |
 | Sync response budget (p95) | — | 1,200 ms | §8.1 |
 | Verified payload budget (p95) | — | 6,000 ms | §8.1 |
-| Tier-3 per-portal timeout | — | 4,000 ms | TinyFish Gateway |
+| Tier-3 per-portal timeout | — | 6,000 ms | TinyFish Gateway |
 | Top-N verified per query | — | 5 (concurrency 3) | Orchestrator |
 | Snapshot object lifecycle | — | 90 days | Object Storage |
 

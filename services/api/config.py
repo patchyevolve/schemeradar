@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     tinyfish_fetch_base_url: str = "https://api.fetch.tinyfish.ai"
     tinyfish_timeout_tier1_ms: int = 2000
     tinyfish_timeout_tier2_ms: int = 8000
-    tinyfish_timeout_tier3_ms: int = 4000
+    tinyfish_timeout_tier3_ms: int = 6000
     tinyfish_browser_concurrency: int = 3
     tinyfish_top_n_verified: int = 5
 

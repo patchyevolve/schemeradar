@@ -929,7 +929,7 @@ def test_step15_inserts_exactly_one_verification_logs_row_per_run(db: FakeDB):
     assert row["verification_status"] == "INTAKE_OPEN"
     assert row["extracted_deadline"] == "2026-12-31"      # ISO-8601, not a date
     assert row["snapshot_key"] == f"snapshots/{SCH_ID}/job-audit.png"
-    assert row["duration_ms"] == res.duration_ms <= 4000
+    assert row["duration_ms"] == res.duration_ms <= 6000
     assert row["agent_version"] and row["error_class"] is None
     assert row["started_at"] <= row["finished_at"]
     assert "submit_control_enabled" in row["observed_signals"]
@@ -1061,12 +1061,12 @@ def test_l2_rejects_an_enum_outside_the_whitelist():
 
 
 # ===========================================================================
-# §2.7 TC-C8 — the hard 4,000 ms Tier-3 budget (Phase 1 §7.3)
+# §2.7 TC-C8 — the hard 6,000 ms Tier-3 budget (Phase 1 §7.3)
 # ===========================================================================
 def test_tc_c8_over_budget_job_completes_as_unreachable_timeout(caplog):
-    """TC-C8: agent exceeds 4,000 ms -> job completes, status UNREACHABLE,
-    error_class=timeout, duration_ms over budget, logged as over-budget, and
-    nothing raises (the citizen response is never blocked)."""
+    """TC-C8: agent exceeds the Tier-3 budget -> job completes, status
+    UNREACHABLE, error_class=timeout, duration_ms over budget, logged as
+    over-budget, and nothing raises (the citizen response is never blocked)."""
     import logging as _logging
 
     from services.tinyfish.agent import TinyFishWebAgentClient
@@ -1115,15 +1115,90 @@ def test_under_budget_success_is_not_rewritten_by_the_budget_gate():
 # ===========================================================================
 # Snapshot writer — WORKFLOW §2.3 step 13 (SigV4 against MinIO, mocked here)
 # ===========================================================================
-def test_snapshot_store_puts_and_self_creates_the_bucket_on_first_run():
+def test_snapshot_store_ensures_bucket_and_lifecycle_before_the_first_write():
+    """Build Order 3.9: bucket + the 90-day rule are installed once, up front."""
     from services.tinyfish.agent import SnapshotStore
 
-    calls: list[tuple[str, str]] = []
+    calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.raw_path.decode())
+        return httpx.Response(200, content=b"")
+
+    store = SnapshotStore(
+        endpoint="http://minio.test",
+        bucket="schemeradar-snapshots",
+        access_key="AKIA_TEST",
+        secret_key="secret",
+        http=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    assert run(store.put("snapshots/sch_1/job_1.png", b"\x89PNG-bytes")) is not None
+    assert calls == [
+        "/schemeradar-snapshots",              # CreateBucket (idempotent)
+        "/schemeradar-snapshots?lifecycle=",   # 90-day rule on snapshots/
+        "/schemeradar-snapshots/snapshots/sch_1/job_1.png",
+    ]
+
+    # Same instance, second write: neither setup call may be repeated.
+    calls.clear()
+    assert run(store.put("snapshots/sch_1/job_2.png", b"b")) is not None
+    assert calls == ["/schemeradar-snapshots/snapshots/sch_1/job_2.png"]
+
+
+def test_snapshot_store_installs_a_90_day_expiry_rule_scoped_to_snapshots_prefix():
+    import base64
+    import hashlib
+
+    from services.tinyfish.agent import SnapshotStore
+
+    lifecycle: list[tuple[str, bytes, dict[str, str]]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if b"lifecycle" in request.url.query:
+            lifecycle.append((
+                request.url.raw_path.decode(), request.content, dict(request.headers),
+            ))
+        return httpx.Response(200, content=b"")
+
+    store = SnapshotStore(
+        endpoint="http://minio.test",
+        bucket="schemeradar-snapshots",
+        access_key="AKIA_TEST",
+        secret_key="secret",
+        http=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    run(store.put("snapshots/sch_1/job_1.png", b"\x89PNG-bytes"))
+
+    assert len(lifecycle) == 1                       # exactly one rule, once
+    path, xml, headers = lifecycle[0]
+    assert path == "/schemeradar-snapshots?lifecycle="
+    assert headers.get("content-type") == "application/xml"
+    body = xml.decode("utf-8")
+    assert "<Expiration><Days>90</Days></Expiration>" in body
+    assert "<Prefix>snapshots/</Prefix>" in body     # scoped — nothing else expires
+    assert "<Status>Enabled</Status>" in body
+    # Live MinIO rejects this operation without an integrity header
+    # (`MissingContentMD5`), and it must be covered by the signature too.
+    assert headers.get("content-md5")
+    assert "content-md5" in headers["authorization"].lower()
+    signed = headers["authorization"].split("SignedHeaders=")[1].split(",")[0]
+    assert "content-md5" in signed
+    assert headers["content-md5"] == base64.b64encode(
+        hashlib.md5(xml, usedforsecurity=False).digest()
+    ).decode("ascii")
+
+
+def test_snapshot_store_self_creates_the_bucket_and_retries_the_object_once():
+    """404 on the object PUT -> CreateBucket -> PUT retried once (belt & braces)."""
+    from services.tinyfish.agent import SnapshotStore
+
+    calls: list[str] = []
     object_puts = {"n": 0}
 
     def handler(request: httpx.Request) -> httpx.Response:
-        calls.append((request.method, request.url.path))
-        if request.url.path == "/schemeradar-snapshots":
+        raw = request.url.raw_path.decode()
+        calls.append(raw)
+        if "lifecycle" in raw or raw == "/schemeradar-snapshots":
             return httpx.Response(200, content=b"")
         object_puts["n"] += 1
         if object_puts["n"] == 1:
@@ -1140,12 +1215,76 @@ def test_snapshot_store_puts_and_self_creates_the_bucket_on_first_run():
     url = run(store.put("snapshots/sch_1/job_1.png", b"\x89PNG-bytes"))
 
     assert url == "http://minio.test/schemeradar-snapshots/snapshots/sch_1/job_1.png"
-    # object PUT -> 404 -> CreateBucket -> object PUT retried once
-    assert calls == [
-        ("PUT", "/schemeradar-snapshots/snapshots/sch_1/job_1.png"),
-        ("PUT", "/schemeradar-snapshots"),
-        ("PUT", "/schemeradar-snapshots/snapshots/sch_1/job_1.png"),
+    assert calls[2:] == [
+        "/schemeradar-snapshots/snapshots/sch_1/job_1.png",   # 404
+        "/schemeradar-snapshots",                              # CreateBucket
+        "/schemeradar-snapshots/snapshots/sch_1/job_1.png",    # retried once
     ]
+
+
+def test_generate_snapshot_url_mints_a_presigned_get():
+    """§7.3 signed read: query-string auth, one hour, never a plain link."""
+    from urllib.parse import parse_qsl, urlsplit
+
+    from services.tinyfish.agent import SNAPSHOT_URL_TTL_SECONDS, SnapshotStore
+
+    store = SnapshotStore(
+        endpoint="http://minio.test:9000", bucket="b",
+        access_key="AKIA_TEST", secret_key="secret",
+    )
+    url = store.generate_snapshot_url("snapshots/sch_1/job_1.png", expires_in=600)
+
+    assert url is not None
+    split = urlsplit(url)
+    assert (split.scheme, split.netloc) == ("http", "minio.test:9000")
+    assert split.path == "/b/snapshots/sch_1/job_1.png"
+
+    q = dict(parse_qsl(split.query))
+    assert q["X-Amz-Algorithm"] == "AWS4-HMAC-SHA256"
+    assert q["X-Amz-Credential"].startswith("AKIA_TEST/")
+    assert q["X-Amz-Credential"].endswith("/us-east-1/s3/aws4_request")
+    assert q["X-Amz-Expires"] == "600"
+    assert q["X-Amz-SignedHeaders"] == "host"
+    assert len(q["X-Amz-Signature"]) == 64
+    # default TTL is the documented one, and the signature is what varies
+    default = store.generate_snapshot_url("snapshots/sch_1/job_1.png")
+    assert default is not None and dict(parse_qsl(urlsplit(default).query))[
+        "X-Amz-Expires"] == str(SNAPSHOT_URL_TTL_SECONDS)
+    # the canonical query must be sorted, or the signature will not match
+    assert split.query.split("&X-Amz-Signature=")[0] == "&".join(
+        sorted(split.query.split("&X-Amz-Signature=")[0].split("&"))
+    )
+
+
+def test_generate_snapshot_url_accepts_a_stored_key_or_a_full_object_url():
+    from urllib.parse import urlsplit
+
+    from services.tinyfish.agent import SnapshotStore
+
+    store = SnapshotStore(
+        endpoint="http://minio.test:9000", bucket="b",
+        access_key="AK", secret_key="SK",
+    )
+    stored_url = "http://minio.test:9000/b/snapshots/sch_1/job_1.png"
+    from_key = store.generate_snapshot_url("snapshots/sch_1/job_1.png")
+    from_url = store.generate_snapshot_url(stored_url)
+
+    assert from_key is not None and from_url is not None
+    # A durable URL is signed verbatim — never re-pointed at another host.
+    assert urlsplit(from_url).path == "/b/snapshots/sch_1/job_1.png"
+    assert urlsplit(from_key).path == "/b/snapshots/sch_1/job_1.png"
+    assert urlsplit(from_key).netloc == urlsplit(from_url).netloc
+
+
+def test_generate_snapshot_url_fails_closed_without_credentials():
+    from services.tinyfish.agent import SnapshotStore
+
+    store = SnapshotStore(
+        endpoint="http://minio.test", bucket="b", access_key="", secret_key="",
+    )
+    assert store.generate_snapshot_url("snapshots/sch_1/job_1.png") is None
+    assert store.generate_snapshot_url("") is None
+    assert store.generate_snapshot_url("http://minio.test") is None
 
 
 def test_snapshot_store_signs_the_request_and_honours_credentials():
@@ -1334,6 +1473,73 @@ def test_verify_stream_emits_sse_frames_and_finishes_on_the_verdict(monkeypatch)
     assert frames[-1]["result"]["extracted_deadline"] == "2026-12-31"
     assert frames[-1]["scheme_id"] == SCH_ID
     assert all(f["done"] is False for f in frames[:-1])
+
+
+def test_verify_stream_issues_the_signed_link_and_never_the_bare_one(monkeypatch):
+    """Build Order 3.9: the browser gets an expiring credential, Mongo the key.
+
+    The agent persists *before* this frame exists, so what the API returns can
+    be short-lived while what is stored stays durable.
+    """
+    from services.api.models import VerificationStatus
+    from services.api.routes import verify as verify_mod
+    from services.tinyfish.agent import VerificationResult
+
+    durable = "http://minio:9000/schemeradar-snapshots/snapshots/sch_1/job_1.png"
+    result = VerificationResult(
+        verification_status=VerificationStatus.INTAKE_OPEN,
+        extracted_deadline=None,
+        snapshot_url=durable,
+        final_url=GOV_URL,
+        observed_signals=["snapshot_captured"],
+        duration_ms=12,
+        job_id="job-signed",
+    )
+    seen: list[str | None] = []
+
+    def _sign(url: str | None, *, expires_in: int = 3600) -> str | None:
+        seen.append(url)
+        return f"{url}?X-Amz-Expires={expires_in}&X-Amz-Signature=deadbeef"
+
+    monkeypatch.setattr(verify_mod, "portal_url_for", lambda sid: GOV_URL)
+    monkeypatch.setattr(
+        verify_mod, "make_agent",
+        lambda **_kw: StubAgent(["capturing_snapshot", result]),
+    )
+    monkeypatch.setattr(verify_mod, "get_db", lambda: FakeDB())
+    monkeypatch.setattr(verify_mod, "sign_snapshot_url", _sign)
+
+    resp = _client().get(f"/api/v1/verify/stream/{SCH_ID}")
+    frames = [json.loads(l[6:]) for l in resp.text.splitlines() if l.startswith("data: ")]
+    issued = frames[-1]["result"]["snapshot_url"]
+
+    assert seen == [durable]                 # called once, with the durable ref
+    assert issued != durable                 # the bare link is never handed out
+    assert "X-Amz-Expires=3600" in issued and "X-Amz-Signature=" in issued
+
+
+def test_sign_snapshot_url_falls_back_to_the_durable_reference(monkeypatch):
+    """A signing failure must never drop the evidence from the response."""
+    from services.api.routes import verify as verify_mod
+    from services.tinyfish import agent as agent_mod
+
+    durable = "http://minio:9000/b/snapshots/sch_1/job_1.png"
+
+    assert verify_mod.sign_snapshot_url(None) is None
+    assert verify_mod.sign_snapshot_url("") is None
+
+    # Signing unavailable (no credentials configured) -> pass the reference through.
+    monkeypatch.setattr(
+        agent_mod.SnapshotStore, "generate_snapshot_url", lambda *_a, **_k: None
+    )
+    assert verify_mod.sign_snapshot_url(durable) == durable
+
+    # Signing blows up -> still pass it through, never raise into the SSE loop.
+    def _boom(*_a, **_k):
+        raise RuntimeError("signer is down")
+
+    monkeypatch.setattr(agent_mod.SnapshotStore, "generate_snapshot_url", _boom)
+    assert verify_mod.sign_snapshot_url(durable) == durable
 
 
 def test_verify_stream_404s_for_an_unknown_scheme(monkeypatch):

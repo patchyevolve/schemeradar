@@ -28,7 +28,7 @@
 | Phase 1 §6.3 | $S_{sem} = \mathrm{clamp}(\lambda_{llm} \cdot S_{hybrid}, 0, 1)$, RRF $k = 60$ |
 | Phase 1 §6.4 | $P_{docs} = \min(P_{cap}, \sum p(d) \cdot w_{req}(d))$, $P_{cap} = 0.60$ |
 | Phase 1 §6.1 band table | `HIGH` ≥ 0.80 · `MEDIUM` ≥ 0.60 · `LOW` ≥ 0.30 · `SUPPRESSED` < 0.30 · `NEAR_MISS` routed separately |
-| Phase 1 §7.3 | Tier-3 budget ≤ 4,000 ms, top-N = 5, browser concurrency cap 3, snapshot key `snapshots/{scheme_id}/{job_id}.png` |
+| Phase 1 §7.3 | Tier-3 budget ≤ 6,000 ms, top-N = 5, browser concurrency cap 3, snapshot key `snapshots/{scheme_id}/{job_id}.png` |
 | Phase 1 G2 | 60-minute verification freshness window |
 | Phase 2 §2.3 | `Scheme` schema, `verification_*` cluster, `verification_status` 6-value enum |
 | Phase 2 §2.5 / §2.5.1 | Document tiers, pinned $p(d)$, `charged_weight` resolution |
@@ -66,7 +66,7 @@ flowchart TD
     REVIEW --> P1
     P5 --> SYNC["Sync payload<br/>ranked SchemeMatch[] · verification_status = PENDING"]
     SYNC --> DASH["Stage 3 — Dashboard<br/>HIGH / MEDIUM / LOW / NEAR_MISS sections"]
-    SYNC --> JOB["Tier-3 Web Agent job (top-5, async ≤ 4,000 ms)"]
+    SYNC --> JOB["Tier-3 Web Agent job (top-5, async ≤ 6,000 ms)"]
 
     JOB -->|"SSE: verification_completed"| DASH
     DASH --> CARD["Scheme card<br/>₹ value · confidence % · verification badge · deadline"]
@@ -296,7 +296,7 @@ The badge is derived from `verification_status` **after** the Phase 2 §6 read-t
 ### 2.1 Invocation contract
 
 ```
-verify(scheme_id, portal_url, timeout_ms = 4000, job_id)
+verify(scheme_id, portal_url, timeout_ms = 6000, job_id)
   → VerificationResult {
         verification_status, extracted_deadline, snapshot_url, final_url,
         observed_signals[], error_class, duration_ms, job_id
@@ -306,7 +306,7 @@ verify(scheme_id, portal_url, timeout_ms = 4000, job_id)
 | Property | Value (source) |
 |---|---|
 | Trigger | Orchestrator, top-**N = 5** candidates after the sync response; plus the background re-verification cron (Phase 1 §7.3) |
-| Hard timeout | **4,000 ms** per portal (Phase 1 §7.3) |
+| Hard timeout | **6,000 ms** per portal (Phase 1 §7.3) |
 | Browser concurrency | **3** (Phase 1 §7.3) |
 | Failure behaviour | Never blocks the sync eligibility response; on failure the `verification_*` cluster is updated per §2.7 |
 | Evidence | `snapshots/{scheme_id}/{job_id}.png` (Phase 1 §7.3) |
@@ -416,13 +416,28 @@ CAPTURE EVIDENCE
 
 VERDICT  (first matching row wins — see §2.5)
 14. Apply the precedence table.
+14a. BUDGET GATE (§2.7 · TC-C8 · Edge C3). Compute duration_ms; if
+     duration_ms > timeout_ms the run is marked over-budget (metric) and
+     then degraded:
+       - error_class still null ⇒ OVERRULE the precedence table:
+         verification_status := UNREACHABLE, error_class := timeout, and the
+         signal-derived verdict above is DISCARDED — an over-budget run is
+         never reported as a completed verdict;
+       - a specific error_class already set (dns_failure, waf_block,
+         captcha, http_5xx, ssrf_blocked) ⇒ it STANDS — the budget must
+         never mask the real cause — but the run is still counted
+         over-budget.
+     Either way the job ALWAYS completes; the breach degrades exactly like
+     a navigation timeout (step 3 · Edge C3) and never blocks the citizen.
 
 PERSIST
 15. ALWAYS insert a verification_logs row (success or failure).
 16. Update the Scheme verification_* cluster per §2.7.
 17. Emit SSE event "verification_completed" | "verification_failed".
-18. Close context. Assert duration_ms <= 4000; if exceeded, the run is
-    logged as over-budget (metric), status still stands.
+18. Close context. The gate in 14a runs BEFORE persistence, so rows 15–17
+    store the degraded status; duration_ms on the persisted row already
+    exceeds timeout_ms whenever the over-budget metric fires (TC-C8 asserts
+    duration_ms > timeout_ms on that row).
 ────────────────────────────────────────────────────────────────
 ```
 
@@ -500,8 +515,8 @@ Comparison baseline is always **today in `Asia/Kolkata`**, never the browser hos
 
 | Concern | Rule |
 |---|---|
-| Per-portal hard timeout | 4,000 ms; context killed on exceed |
-| Retries inside one job | **`MAX_AGENT_RETRIES = 1`**, and only for `timeout` / `http_5xx`, only if elapsed < 2,000 ms (so total stays within 4,000 ms). `captcha`, `waf_block`, `ssrf_blocked` are **never** retried |
+| Per-portal hard timeout | 6,000 ms; context killed on exceed. A breach degrades the verdict per §2.3 step 14a — it is never reported as a completed verdict |
+| Retries inside one job | **`MAX_AGENT_RETRIES = 1`**, and only for `timeout` / `http_5xx`, only if elapsed < 2,000 ms (so total stays within 6,000 ms). `captcha`, `waf_block`, `ssrf_blocked` are **never** retried |
 | Concurrency | 3 browsers; a 6th queued job waits rather than failing |
 | On-demand freshness | Every `POST /api/v1/profile/qualify` triggers Tier-3 for its own top-5 — the primary freshness mechanism for *displayed* schemes |
 | Background sweep | Re-verification cron over the **hot set** = schemes appearing in a served response in the last 24 h, ordered by `verified_at` ascending, until the cycle budget is exhausted; target `verified_at` age < `REFRESH_THRESHOLD` = 45 min so the 60-minute G2 window is never breached for a hot scheme |
@@ -636,7 +651,7 @@ Each edge case states: **trigger → formal system behaviour with the exact Phas
 | **C1** — HTTP 5xx / maintenance page | §2.3 step 4a/4b, verdict row 3 | `http_5xx` | `UNREACHABLE` |
 | **C2** — WAF challenge or undismissable overlay | §2.3 step 4c/6, verdict rows 4 | `waf_block` | `BLOCKED` |
 | **C2′** — CAPTCHA widget with no reachable apply control | §2.3 step 4d, verdict row 5 | `captcha` | `BLOCKED` |
-| **C3** — navigation or overall timeout | §2.3 step 3 / step 18 | `timeout` | `UNREACHABLE` (one in-job retry if elapsed < 2,000 ms) |
+| **C3** — navigation or overall timeout | §2.3 step 3 / step 14a | `timeout` | `UNREACHABLE` (one in-job retry if elapsed < 2,000 ms) |
 | **C4** — DNS / connection refused | §2.3 step 3 | `dns_failure` | `UNREACHABLE` |
 | **C5** — SSRF pre-flight rejection | §2.3 step 1 | `ssrf_blocked` | `UNREACHABLE`, never launched |
 
@@ -693,7 +708,7 @@ Each edge case states: **trigger → formal system behaviour with the exact Phas
 | **TC-C5** | Last success 90 minutes ago, then outage | Response built at read time | `verification_status` rewritten to `UNVERIFIED`, `is_stale = true`, `last_known_status = INTAKE_OPEN` |
 | **TC-C6** | Last success 10 minutes ago, then outage | Response built | `verification_status = UNREACHABLE`, `is_stale = false`, Apply CTA **disabled** |
 | **TC-C7** | Sync response while Tier-3 is still running | Immediately after `profile/qualify` | Card shows `PENDING` shimmer, score and band already correct |
-| **TC-C8** | Agent exceeds 4,000 ms | Job completes | Status `UNREACHABLE`, `error_class = timeout`, `duration_ms > 4000` logged as over-budget, **no** blocking of the citizen response |
+| **TC-C8** | Agent exceeds 6,000 ms | Job completes | Status `UNREACHABLE`, `error_class = timeout`, `duration_ms > 6000` logged as over-budget, **no** blocking of the citizen response (the §2.3 step 14a budget gate discards an otherwise-OK verdict; a run that already carries a specific `error_class` keeps it) |
 | **TC-C9** | `portal_url` resolving to `10.0.0.5` | Pre-flight | Job never launched, `error_class = ssrf_blocked`, `verification_status = UNREACHABLE` |
 | **TC-C10** | 8 verification jobs queued | Scheduler | Only 3 browsers run; the remainder queue — no job fails from concurrency |
 | **TC-C11** | Portal recovers | Next cron / next query | Fresh successful run overwrites `verification_status`, sets `verified_at = now`, `last_known_status = null`, badge returns to green |

@@ -230,7 +230,7 @@ FastAPI + Pydantic v2  ── Query Orchestrator (parallel fan-out, SSE)
 | **Question it answers** | *What schemes exist that we've never seen?* | *What does this page actually say?* | *Is this portal accepting applications **right now**?* |
 | **Purpose** | **Discovery crawler** — newly notified gazettes, circulars, state portal announcements via targeted query templates | **Dynamic DOM rendering** — renders legacy **ASP.NET `__doPostBack`** pages and JS tables that kill `requests`+`BeautifulSoup`; returns token-efficient clean Markdown | **Live verification** — navigate → dismiss notice popups → detect *enabled* submit control → parse closing date → **viewport snapshot as proof** |
 | **Feeds** | Ingestion Pipeline | Ingestion Pipeline → LLM Structured Schema Parser | Citizen query path (async, top-5) + freshness cron |
-| **Latency budget** | **≤ 2,000 ms**/batch | **≤ 8,000 ms**/page | **≤ 4,000 ms**/portal (hard timeout) |
+| **Latency budget** | **≤ 2,000 ms**/batch | **≤ 8,000 ms**/page | **≤ 6,000 ms**/portal (hard timeout) |
 | **On the citizen request path?** | No | No | **Async only** (SSE) |
 | **Failure fallback** | Sitemap/RSS polling | `fetch_unreachable` — **never index unrendered content** | `UNREACHABLE` / `BLOCKED` + `last_known_status` — eligibility unaffected |
 
@@ -483,7 +483,7 @@ Back **SchemeRadar**, and give every Indian the radar their own tax money alread
 | Parse-confidence floor | 0.75 | Phase 1 §3.1 · Phase 2 §7.4 |
 | Sync p95 | 1,200 ms | Phase 1 §8.1 |
 | Verified payload p95 | 6,000 ms | Phase 1 §8.1 |
-| Tier-1 / Tier-2 / Tier-3 budgets | 2,000 / 8,000 / 4,000 ms | Phase 1 §7 |
+| Tier-1 / Tier-2 / Tier-3 budgets | 2,000 / 8,000 / 6,000 ms | Phase 1 §7 |
 | Verification freshness | 60 minutes | Phase 1 G2 · §9 |
 | Top-N verified / browser concurrency | 5 / 3 | Phase 1 §7.3 |
 | Snapshot lifecycle | 90 days | Phase 1 §7.3 |
