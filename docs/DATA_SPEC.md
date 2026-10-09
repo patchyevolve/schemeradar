@@ -1531,7 +1531,7 @@ RULES:
 
 A `null` provenance value on a **required** field is itself a validation failure (layer L3, §7.4).
 
-### 7.4 Validation ladder (Pydantic v2, four layers)
+### 7.4 Validation ladder (Pydantic v2, five layers L1–L5)
 
 Validation is strictly ordered; the first failing layer stops evaluation.
 

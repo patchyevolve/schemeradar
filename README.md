@@ -304,6 +304,7 @@ Two canonical worked examples are carried verbatim through every document, with 
 > |---|---|
 > | 1 Clone · 2 Docker infra · 3 venv · 4 `.env` · 6 API · 7 Dashboard | ✅ **Verified working** (Build Order Step 1) |
 > | 5 Create collections & seed | ✅ **Verified working** (Build Order Step 2) — **Gate G2 locked**: schema contract, storage + indexes, idempotent seed, filtered Qdrant and BM25 recall. Score proofs (0.887 / 0.688 / 0.988) land with Step 4, Gate G4 |
+> | Tier 1–3 gateway + live portal verification (`services/tinyfish/`) | ✅ **Verified working** (Build Order Step 3) — **153** mocked tests · `python -m tools.validate_specs` **4/4** (now including the Step-3 boundary lint) · **5 live `gov.in` portals, 5/5 matching the §2.5 precedence table**, each writing a retrievable MinIO snapshot **and** a `verification_logs` row. Live verdicts: `INTAKE_OPEN` ×3 · `BLOCKED` (WAF) ×1 · `UNREACHABLE` (frozen 4,000 ms budget) ×1. *Gate G3's "Tier 3 disabled ⇒ scoring unaffected" half lands with Step 4, which builds the scoring engine.* |
 > | 8 Test suite | ⬜ Build Order Step 6 — `pytest` installed, acceptance tests not written yet |
 >
 > Frozen scope: architecture (`docs/ARCHITECTURE.md`), data model (`docs/DATA_SPEC.md`), workflow & tests (`docs/WORKFLOW_AND_TESTS.md`) and pitch deck (`docs/PPT_SUBMISSION.md`) are complete and CI-validated via `python -m tools.validate_specs`.

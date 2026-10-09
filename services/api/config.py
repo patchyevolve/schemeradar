@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # --- object storage (verification snapshots, 90-day lifecycle) ----------
     object_storage_endpoint: str = "http://localhost:9000"
     object_storage_bucket: str = "schemeradar-snapshots"
+    # SigV4 credentials for PUT snapshots/{scheme_id}/{job_id}.png.
+    # Empty => the snapshot upload is skipped (signal `snapshot_failed`), which
+    # never changes the verdict (WORKFLOW §2.3 step 13).
+    object_storage_access_key: str = ""
+    object_storage_secret_key: str = ""
 
     # --- TinyFish (ARCHITECTURE §7) -----------------------------------------
     tinyfish_api_key: str = ""

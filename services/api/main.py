@@ -6,12 +6,14 @@ ARCHITECTURE §5.2 — single public entry point: contract enforcement
 (Pydantic v2), authentication, rate limiting, and the Query Orchestrator.
 
 Step 3 scaffolds the route layer (`services/api/routes/`): the dual-path
-discovery/search route `POST /api/v1/profile/qualify` (ARCHITECTURE §5.2.1)
-is mounted against *placeholder* retrieval and scoring functions, so
-OpenAPI already publishes the contract the frontend binds to. The remaining
-citizen/admin routes (§5.2 "Key endpoints"), the orchestrator fan-out, and
-all scoring / TinyFish / Playwright behaviour land in BUILD_ORDER Step 4 —
-no eligibility math runs here yet.
+discovery/search route `POST /api/v1/profile/qualify` (ARCHITECTURE §5.2.1),
+the live Tier-3 SSE stream `GET /api/v1/verify/stream/{scheme_id}` (WORKFLOW
+§2.1) and the protected admin ingestion trigger
+`POST /api/v1/admin/ingest/refresh` (BUILD_ORDER §6.3 4.13) are mounted.
+The qualify pipeline still runs against *placeholder* retrieval and scoring
+functions — no eligibility math runs here yet — and the verify stream reaches
+the browser agent through a patchable factory, so OpenAPI publishes every
+contract the frontend binds to without any live portal being contacted.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
 from services.api.config import get_settings
-from services.api.routes import qualify
+from services.api.routes import admin, qualify, verify
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,6 +56,8 @@ app = FastAPI(
 # One router per services/api/routes/<name>.py; each fixes its own /api/v1
 # prefix so the mount order below carries no routing meaning.
 app.include_router(qualify.router)
+app.include_router(verify.router)
+app.include_router(admin.router)
 
 
 @app.get("/health", tags=["operability"])

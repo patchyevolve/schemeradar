@@ -136,5 +136,42 @@ for v in ["phase2.py", "phase3.py", "phase4.py"]:
     r = subprocess.run([sys.executable, str(checks_dir / v)], capture_output=True, text=True)
     chk(f"spec_checks/{v} still green", r.returncode == 0, r.stdout[-200:] + r.stderr[-200:])
 
+print("\n[8] TinyFish boundary lint (BUILD_ORDER §5.4 box 1)")
+# ARCHITECTURE 5.5 boundary rule: "No other module may call TinyFish
+# endpoints directly" -- the gateway (services/tinyfish/) owns the hosts,
+# retries, rate limits and audit logging in one place.  This is the lint rule
+# that keeps that true: outside the gateway, only Settings may even *know* an
+# endpoint host, and nothing outside may hold a host and an HTTP client at once.
+GATEWAY = (root / "services" / "tinyfish").resolve()
+HOSTS = ("api.search.tinyfish.ai", "api.fetch.tinyfish.ai")
+HTTP_CLIENTS = ("httpx", "requests", "urllib.request", "aiohttp")
+# services/api/config.py DECLARES the endpoint (Settings/.env must be able to
+# override it) but must never call it.
+DECLARES_ONLY = {"services/api/config.py"}
+knows, calls = [], []
+for base in ("services", "web", "tools"):
+    top = root / base
+    if not top.exists():
+        continue
+    for path in sorted(top.rglob("*.py")):
+        if "__pycache__" in path.parts:
+            continue
+        rel = path.relative_to(root)
+        if GATEWAY in path.parents or path.parent == GATEWAY:
+            continue                      # the gateway itself
+        if str(rel).startswith("tools/spec_checks"):
+            continue                      # validators quote the specs verbatim
+        text = path.read_text(encoding="utf8", errors="replace")
+        if not any(h in text for h in HOSTS):
+            continue
+        if str(rel) not in DECLARES_ONLY:
+            knows.append(str(rel))
+        if any(m in text for m in HTTP_CLIENTS):
+            calls.append(str(rel))
+chk("no module outside services/tinyfish/ knows a TinyFish endpoint",
+    not knows, str(knows))
+chk("declaring a host in Settings never comes with an HTTP client",
+    not calls, str(calls))
+
 print("\nRESULT:", "ALL CHECKS PASSED" if ok else "FAILURES PRESENT")
 sys.exit(0 if ok else 1)
