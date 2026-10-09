@@ -266,7 +266,7 @@ Full detail → [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) §7 · agent algo
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| `POST` | `/api/v1/profile/qualify` | Submit `ProfileContext` → ranked `SchemeMatch[]` with `score_breakdown`, ≤ 1,200 ms p95 |
+| `POST` | `/api/v1/profile/qualify` | Submit `ProfileContext` + optional `?q=` → `QualificationResponse` with ranked `matches[]` (`SchemeMatch[]` + `score_breakdown`), ≤ 1,200 ms p95 |
 | `GET` | `/api/v1/schemes/{scheme_id}` | Canonical scheme record |
 | `POST` | `/api/v1/verify/{scheme_id}` | Kick off Tier-3 live verification (async) |
 | `GET` | `/api/v1/verify/stream/{job_id}` | **SSE** stream of `VerificationEvent`s → badge updates |
@@ -387,6 +387,11 @@ curl -s -X POST http://localhost:8000/api/v1/profile/qualify \
   -d @examples/profile_ananya.json | python -m json.tool
 # expect: Score 0.887 · band HIGH · score_breakdown fully populated
 ```
+
+Add `?q=<text>` for the keyword-search path; omit it for profile-driven discovery
+(ARCHITECTURE §5.2.1). Until BUILD_ORDER Step 4 (Gate G4) fills in retrieval and
+scoring, the scaffolded route answers `200` with `matches: []` and echoes the
+resolved `mode` / `query`.
 
 ### 7 · Run the dashboard
 

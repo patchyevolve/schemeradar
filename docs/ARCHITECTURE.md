@@ -250,10 +250,47 @@ flowchart TD
 | **Responsibility** | Single public entry point. Contract enforcement (Pydantic v2), authentication, rate limiting, and the **Query Orchestrator** that fans out to retrieval, scoring, and verification in the correct order with timeouts. |
 | **Owns** | Route definitions, request/response schemas, orchestrator control flow, per-request tracing id, latency budget enforcement, SSE stream lifecycle, admin/inestion trigger endpoints. |
 | **Must NOT own** | Vector math, rule evaluation logic, LLM prompting, browser automation — these are delegated to their modules behind typed interfaces. |
-| **Inputs** | HTTP/JSON from Client; internal calls to Retrieval, Scoring, TinyFish Gateway; reads/writes to MongoDB. |
-| **Outputs** | Sync response (`SchemeMatch[]` + `score_breakdown`); async `VerificationEvent` streams; audit logs. |
-| **Key endpoints** | `POST /api/v1/profile/qualify` · `GET /api/v1/schemes/{scheme_id}` · `POST /api/v1/verify/{scheme_id}` · `GET /api/v1/checklist/{scheme_id}` · `GET /api/v1/verify/stream/{job_id}` (SSE) · `POST /api/v1/admin/ingest/refresh` (protected) |
+| **Inputs** | HTTP/JSON from Client — a `ProfileContext` body plus the optional `?q=` query string on `POST /api/v1/profile/qualify` (§5.2.1); internal calls to Retrieval, Scoring, TinyFish Gateway; reads/writes to MongoDB. |
+| **Outputs** | Sync response — `QualificationResponse` whose `matches[]` is `SchemeMatch[]` + `score_breakdown` (§5.2.1); async `VerificationEvent` streams; audit logs. |
+| **Key endpoints** | `POST /api/v1/profile/qualify` (body `ProfileContext`, query `?q=` — §5.2.1) · `GET /api/v1/schemes/{scheme_id}` · `POST /api/v1/verify/{scheme_id}` · `GET /api/v1/checklist/{scheme_id}` · `GET /api/v1/verify/stream/{job_id}` (SSE) · `POST /api/v1/admin/ingest/refresh` (protected) |
 | **Failure behavior** | Downstream timeout → return partial results with `verification_status = PENDING` rather than a 5xx. Never block the eligibility answer on TinyFish. |
+
+#### 5.2.1 Dual-Path Discovery / Search Flow — `POST /api/v1/profile/qualify`
+
+**One route, two modes.** The endpoint always takes a `ProfileContext` body. A single optional query parameter, `?q=`, selects between two paths; there is no second search endpoint, and the body schema (DATA_SPEC §3.1) is byte-identical in both modes.
+
+| | **Mode 1 — Home Screen Discovery** | **Mode 2 — Keyword Search** |
+|---|---|---|
+| **Trigger** | `q` absent, empty, or whitespace-only | `q` present and non-empty |
+| **Search string** | **Synthesized from the profile** — state, education, category (e.g. `DL bachelor 1st year SC`) | The raw query text `q` exactly as the citizen typed it |
+| **Retrieval** | Hybrid Retrieval (Qdrant dense + BM25 sparse, RRF-fused) runs over the **synthesized** string | Hybrid Retrieval runs over the **raw `q`** text |
+| **Scoring** | Scorer filters the retrieved candidates through the hard gates against `ProfileContext` | Scorer **intercepts** the retrieved candidates and evaluates/filters them against `ProfileContext` |
+| **UI** | `QualificationResponse` → ranked list, nothing typed | `QualificationResponse` → ranked list reflecting the typed query |
+
+**Pipeline (identical order in both modes):**
+
+| # | Stage | Contract |
+|---|---|---|
+| 1 | **Resolve the search string** | `q` if `q` else `synthesize_profile_query(profile)`. This is the *only* line where the two modes differ. |
+| 2 | **Hybrid Retrieval** | Qdrant dense (`K_dense = 50`, 1024-d `BAAI/bge-m3`) + in-memory BM25 sparse (`K_sparse = 50`) → RRF `k = 60` → fused `K_fused = 30` candidates; payload filters applied **after** fusion (BUILD_ORDER 4.4). This stage only *proposes* candidates — it makes no eligibility decision. |
+| 3 | **Deterministic Scoring** | The 7 hard gates run against `ProfileContext` → `S_det ∈ {0,1}` + `gate_trace[]`; the Score Assembler applies `Score = 0.60·S_det + 0.40·S_sem − P_docs` and assigns a band (§6, BUILD_ORDER 4.1 / 4.7). |
+| 4 | **Frontend display** | The client renders `QualificationResponse.matches` — `Score`, band, `score_breakdown`, `verification_status`. Per §5.1 "Must NOT own": **the browser computes nothing.** |
+
+**Response envelope — `QualificationResponse`** (defined in `services/api/routes/qualify.py`):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `mode` | `"discovery"` \| `"search"` | Which path ran — Mode 1 or Mode 2. |
+| `query` | `string` | The resolved search string: `q` verbatim in Mode 2, the synthesized string in Mode 1. Echoed so the UI can show *what* was searched. |
+| `matches` | `SchemeMatch[]` (DATA_SPEC §3.2) | Ranked results, each carrying `score_breakdown`. |
+| `count` | integer | `len(matches)`. |
+
+**Invariants:**
+
+- The mode is decided by `q` **alone** — never by the contents of the profile.
+- Retrieval always runs **before** scoring: scoring needs a candidate set, and retrieval never gates anything on its own.
+- `q` steers **retrieval only**. It can never loosen a hard gate — `S_det` is a pure function of `(ProfileContext, Scheme.gates)` (§5.4), so a keyword hit cannot promote an ineligible profile past a failed gate, and a near-miss stays a routing concern, not a scoring one (§6.2.2).
+- Scoring is identical in both modes; only the search string differs.
 
 ### 5.3 Storage & Retrieval Layer
 

@@ -599,6 +599,24 @@ This step changes no Phase 1 weight, band, or threshold — it only specializes 
 
 ### 3.1 `ProfileContext` (request body of `POST /api/v1/profile/qualify`)
 
+**Request contract.** `POST /api/v1/profile/qualify` takes two inputs; only one of them is the body below.
+
+| Input | Where | Name | Type | Required | Default | Description |
+|---|---|---|---|---|---|---|
+| Body | `Content-Type: application/json` | — | `ProfileContext` (schema below) | yes | — | Citizen profile. Sole source of truth for every hard gate. |
+| Query | URL query string | `q` | `string` | **no** | `null` | `?q=string` — optional natural-language search text. |
+
+`q` is **not** a property of `ProfileContext`; the schema below is therefore unchanged and `additionalProperties: false` still rejects it if it is sent in the body.
+
+`q` selects between the two modes of the unified discovery/search flow (ARCHITECTURE §5.2.1):
+
+| `q` | Mode | Retrieval runs over |
+|---|---|---|
+| absent, `""`, or whitespace-only | **Mode 1 — Home Screen Discovery** | a search string **synthesized from the profile** (state, education, category) |
+| non-empty | **Mode 2 — Keyword Search** | the **raw `q`** text |
+
+Both modes then run the same scorer against `ProfileContext`; `q` influences retrieval only and can never bypass a hard gate.
+
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",

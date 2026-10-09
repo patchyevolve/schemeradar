@@ -5,10 +5,13 @@
 ARCHITECTURE §5.2 — single public entry point: contract enforcement
 (Pydantic v2), authentication, rate limiting, and the Query Orchestrator.
 
-Step 1 ships only the application shell and a dependency-aware health probe.
-The six frozen citizen/admin routes (§5.2 "Key endpoints") are implemented in
-BUILD_ORDER Step 4, and the orchestrator fan-out must not appear before the
-Neuro-Symbolic Scoring Engine it calls.
+Step 3 scaffolds the route layer (`services/api/routes/`): the dual-path
+discovery/search route `POST /api/v1/profile/qualify` (ARCHITECTURE §5.2.1)
+is mounted against *placeholder* retrieval and scoring functions, so
+OpenAPI already publishes the contract the frontend binds to. The remaining
+citizen/admin routes (§5.2 "Key endpoints"), the orchestrator fan-out, and
+all scoring / TinyFish / Playwright behaviour land in BUILD_ORDER Step 4 —
+no eligibility math runs here yet.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 
 from services.api.config import get_settings
+from services.api.routes import qualify
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,8 +35,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("schemeradar.api")
 
-APP_VERSION = "0.1.0-step1"
-BUILD_ORDER_STEP = 1
+APP_VERSION = "0.1.0-step3"
+BUILD_ORDER_STEP = 3
 
 settings = get_settings()
 
@@ -45,6 +49,11 @@ app = FastAPI(
     ),
     # OpenAPI served at /docs and /openapi.json.
 )
+
+# --- route registration ----------------------------------------------------
+# One router per services/api/routes/<name>.py; each fixes its own /api/v1
+# prefix so the mount order below carries no routing meaning.
+app.include_router(qualify.router)
 
 
 @app.get("/health", tags=["operability"])
