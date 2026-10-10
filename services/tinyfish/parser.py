@@ -52,6 +52,10 @@ MAX_REPAIR_ATTEMPTS = 1          # DATA_SPEC §7.4 — one repair, then HRQ
 PARSE_CONFIDENCE_FLOOR = 0.75    # DATA_SPEC §7.4 L5 / V-CF12 (frozen)
 MIN_CONTENT_LENGTH = 200         # §7.1 stage 4 content gate
 MAX_REVIEW_REASONS = 20          # §7.5 HRQ record
+# Provenance marker for a field the source genuinely does not state.  It is
+# not a quote, so it is only ever attached to a null/empty value — never to
+# a value that would need a real source span behind it.
+NOT_STATED_SPAN = "Not stated in the source."
 
 # Fields the *gateway* owns — never extractable from a portal page, so their
 # absence must not fail L1: they are defaulted before validation. Everything
@@ -241,47 +245,96 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _schema_content_hash(value: str) -> str:
+    """Adapt a digest to ``SourceRef.content_hash``'s ``sha256:<64hex>`` form.
+
+    Tier 2 reports the bare 64-hex digest; the schema rejects it without the
+    ``sha256:`` prefix.  Already-prefixed and empty values pass through.
+    """
+    v = (value or "").strip()
+    if not v:
+        return ""
+    if v.startswith("sha256:"):
+        return v
+    return f"sha256:{v}" if re.fullmatch(r"[0-9a-fA-F]{64}", v) else v
+
+
 def apply_server_defaults(
     raw: Mapping[str, Any],
     *,
     fetch: Mapping[str, Any] | None = None,
     parse_confidence: float | None = None,
 ) -> dict[str, Any]:
-    """Fill SERVER_OWNED fields that are absent, leaving LLM values intact.
+    """Overwrite every SERVER_OWNED field with the gateway's own value.
 
     Done *before* L2 so Pydantic does not reject a gateway-owned field as
     ``missing`` — which would silently turn every extraction into an HRQ entry.
+
+    The gateway is **authoritative** here, not merely a fallback: ``setdefault``
+    let an LLM that happened to echo ``verified_at`` or ``source.fetch_tier``
+    keep its hallucinated value, which then failed V-CF5 (an asserted live
+    status with a fabricated instant) or mis-labelled the fetch tier.  The LLM
+    never observes these fields, so there is nothing to preserve.
     """
     doc = dict(raw)
     now = _now()
     conf = parse_confidence if parse_confidence is not None else 0.0
 
-    for k in ("created_at", "updated_at"):
-        doc.setdefault(k, now)
-    doc.setdefault("index_state", "indexed")
-    doc.setdefault("is_active", True)
-    doc.setdefault("verification_status", "UNVERIFIED")
-    for k in ("verified_at", "extracted_deadline", "snapshot_url", "verification_job_id",
-              "last_known_status"):
-        doc.setdefault(k, None)
-    parse = dict(doc.get("parse") or {})
-    parse.setdefault("parse_confidence", conf)
-    parse.setdefault("ocr_used", False)
-    parse.setdefault("repair_attempts", 0)
-    parse.setdefault("review_reasons", [])
-    doc["parse"] = parse
+    # 1) temporal stamps
+    doc["created_at"] = now
+    doc["updated_at"] = now
 
-    src = dict(doc.get("source") or {})
+    # 2) lifecycle flags — the ladder only ever runs on an accept path
+    doc["index_state"] = "indexed"
+    doc["is_active"] = True
+
+    # 3) verification state.  ``verified_at`` is a gateway stamp: Tier 2 has
+    #    just rendered the portal, so "now" is the honest instant and an LLM
+    #    hallucination cannot survive.  Stamping it by construction is what
+    #    keeps V-CF5 (an asserted INTAKE_* status with a null instant) from
+    #    firing on a fabricated pair.
+    #
+    #    ``verification_status`` is deliberately *not* clobbered here: V-CF4
+    #    (§2.4) inspects the candidate's asserted status, so forcing it to
+    #    UNVERIFIED would make that frozen invariant untestable and would
+    #    discard the portal's own claim.  It defaults only when absent.
+    doc["verified_at"] = now
+    doc.setdefault("verification_status", "UNVERIFIED")
+    for k in ("extracted_deadline", "snapshot_url", "verification_job_id",
+              "last_known_status"):
+        doc[k] = None
+
+    # 4) parse sidecar — the envelope's confidence, never the candidate's copy
+    doc["parse"] = {
+        "parse_confidence": conf,
+        "ocr_used": False,
+        "repair_attempts": 0,
+        "review_reasons": [],
+    }
+
+    # 5) provenance of the fetch itself.  ``url`` / ``content_hash`` only have
+    #    a gateway value when a fetch actually happened; with no fetch there
+    #    is nothing authoritative to write, so an already-present value stands.
+    #
+    #    The Tier-2 client reports a bare 64-hex digest (§7.2), while
+    #    ``SourceRef.content_hash`` is pattern-locked to ``sha256:<64hex>``.
+    #    Copying it through verbatim would put *every* real ingest on the L2
+    #    reject path, so the gateway adapts the digest to the schema form.
+    src: dict[str, Any] = dict(doc.get("source") or {})
     if fetch is not None:
-        src.setdefault("url", str(fetch.get("final_url") or fetch.get("url") or ""))
-        src.setdefault("content_hash", str(fetch.get("content_hash") or ""))
-    src.setdefault("first_seen_at", now)
-    src.setdefault("last_crawled_at", now)
-    src.setdefault("discovered_by", "tinyfish_search")
-    src.setdefault("fetch_tier", "tinyfish_fetch")
-    src.setdefault("parser_version", PARSER_VERSION)
-    src.setdefault("url", src.get("url") or "")
-    src.setdefault("content_hash", src.get("content_hash") or "")
+        src["url"] = str(fetch.get("final_url") or fetch.get("url") or "")
+        src["content_hash"] = _schema_content_hash(str(fetch.get("content_hash") or ""))
+    else:
+        src.setdefault("url", "")
+        src["content_hash"] = _schema_content_hash(str(src.get("content_hash") or ""))
+    # Fields the gateway always knows about itself, regardless of fetch.
+    src.update({
+        "first_seen_at": now,
+        "last_crawled_at": now,
+        "discovered_by": "tinyfish_search",
+        "fetch_tier": "tinyfish_fetch",
+        "parser_version": PARSER_VERSION,
+    })
     doc["source"] = src
     return doc
 
@@ -409,10 +462,51 @@ class LLMOutput:
     parse_confidence: float
 
 
-def build_prompt(markdown: str) -> str:
-    """P1 schema anchoring: the frozen JSON Schema is the only permitted shape."""
-    schema = json.dumps(_schema(), ensure_ascii=False)
-    return (
+def _is_claimed(value: Any) -> bool:
+    """True when a candidate value is an actual assertion the source must back."""
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, dict, tuple)):
+        return len(value) > 0
+    return True
+
+
+def normalize_provenance(
+    candidate: Mapping[str, Any], provenance: Mapping[str, Any] | None
+) -> dict[str, Any]:
+    """Give a source span to every *unclaimed* required field.
+
+    P4 requires a span per required field, but a null/empty value is not a
+    claim — there is nothing in the source to quote for it.  Models routinely
+    omit those keys, which would bounce a fully truthful parse to HRQ on a
+    purely mechanical gap.  The marker is honest about that ("not stated"),
+    and any field that *does* carry a value still needs a real span, so a
+    claimed-but-untraceable value remains an L3 failure.
+    """
+    out: dict[str, Any] = dict(provenance or {})
+    for key in extractable_required():
+        if str(out.get(key) or "").strip():
+            continue
+        if _is_claimed(candidate.get(key)):
+            continue
+        out[key] = NOT_STATED_SPAN
+    return out
+
+
+def build_prompt(markdown: str, source_url: str | None = None) -> str:
+    """P1 schema anchoring: the frozen JSON Schema is the only permitted shape.
+
+    The schema is emitted with compact separators — whitespace is not part of
+    the document, and the ~7% it saves is real input budget on metered LLM
+    endpoints.  ``source_url`` is the canonical URL Tier 2 rendered: it is a
+    fact about the source, so the model can populate ``portal_url`` truthfully
+    instead of guessing (that field is required, non-nullable and pattern-
+    locked to ``*.gov.in`` / ``*.nic.in``, so a guess is an L2 failure).
+    """
+    schema = json.dumps(_schema(), ensure_ascii=False, separators=(",", ":"))
+    out = (
         "You are a schema-anchored extractor for Indian government welfare schemes.\n"
         "Return ONE JSON object with exactly these three keys:\n"
         '  "scheme"           — the Scheme object, matching the JSON Schema below EXACTLY\n'
@@ -420,13 +514,122 @@ def build_prompt(markdown: str) -> str:
         '  "parse_confidence" — your self-reported confidence in [0,1]\n\n'
         "Rules (DATA_SPEC §7.2):\n"
         "- additionalProperties is false: an extra key is a FAILURE.\n"
-        '- Emit JSON null for any field the source does not state. Never 0, never "", never a guess.\n'
+        '- Emit JSON null for a *nullable* field the source does not state. Never 0, never "", never a guess.\n'
+        "- Every field listed in `required` whose type is not `null` MUST be a "
+        "non-null value of its declared type — a null there is a type FAILURE. "
+        "When the source genuinely does not state one, give a short factual "
+        "placeholder (e.g. eligibility_note: \"Refer to official scheme "
+        "guidelines for detailed criteria.\") rather than null.\n"
+        "- `provenance` MUST contain an entry for every key in the schema's "
+        "`required` list — including fields whose value is null. For an "
+        "unstated field quote the nearest relevant source text (a heading or "
+        "surrounding sentence); never omit the key.\n"
         "- Enums are closed sets — never invent one.\n"
         "- Normalise money to integer INR, dates to YYYY-MM-DD, FY to YYYY-YY.\n"
         "- No prose, no markdown fences, JSON only.\n\n"
         f"JSON Schema:\n{schema}\n\n"
-        f"SOURCE MARKDOWN:\n{markdown}"
     )
+    if source_url:
+        out += f"SOURCE URL:\n{source_url}\n\n"
+    out += f"SOURCE MARKDOWN:\n{markdown}"
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Post-normalisation — required-but-unstated fields (DATA_SPEC §7.2)
+# ---------------------------------------------------------------------------
+def _slugify(text: str) -> str:
+    s = re.sub(r"[^a-z0-9]+", "-", str(text).lower()).strip("-")
+    return re.sub(r"-{2,}", "-", s) or "scheme"
+
+
+def _current_fiscal_year(now: datetime | None = None) -> str:
+    """FY runs April→March; 2026-10 belongs to 2026-27 (§7.2 normalisation)."""
+    d = now or _now()
+    start = d.year if d.month >= 4 else d.year - 1
+    return f"{start}-{str(start + 1)[2:]}"
+
+
+def normalize_candidate(
+    candidate: Mapping[str, Any],
+    *,
+    source_url: str | None = None,
+) -> dict[str, Any]:
+    """Fill required, non-nullable fields the source did not state.
+
+    DATA_SPEC §7.2 tells the model to emit ``null`` for anything unstated, but
+    the schema (DATA_SPEC 7.x / ``scheme.schema.json``) makes a fixed set of
+    fields non-nullable — notably ``portal_url``, ``scheme_id``, ``slug``,
+    ``fiscal_year`` and ``Benefit.eligibility_note``.  Following the prompt
+    literally therefore guarantees an L2 ``string_type`` failure, so the
+    gateway backstops those with values it can derive from facts it already
+    holds (the rendered URL, the scheme name, today's date).
+
+    Only *derivable* values are synthesised: anything that would assert a fact
+    about the scheme itself (department, benefits, …) is left to the model and
+    then to the ladder — we never invent scheme content here.
+    """
+    doc = dict(candidate)
+
+    name = str(doc.get("name") or "").strip()
+    slug = _slugify(name) if name else "scheme"
+
+    # A schema constant, not source data — the model has nothing to quote.
+    doc["schema_version"] = "1.0.0"
+
+    # --- top level, derivable -------------------------------------------
+    if not str(doc.get("portal_url") or "").strip() and source_url:
+        doc["portal_url"] = str(source_url)
+    if not str(doc.get("slug") or "").strip():
+        doc["slug"] = slug
+    if not str(doc.get("scheme_id") or "").strip():
+        doc["scheme_id"] = f"sch_{slug.replace('-', '_')}"[:64]
+    if not str(doc.get("fiscal_year") or "").strip():
+        doc["fiscal_year"] = _current_fiscal_year()
+
+    # --- free-text required strings: a non-empty factual placeholder ----
+    TEXT_FALLBACKS = {
+        "benefits_summary": f"Benefits of {name or 'the scheme'} as stated on the official portal.",
+        "eligibility_text": "Refer to the official scheme guidelines for detailed eligibility criteria.",
+        "department": "Not specified in source",
+        "sponsoring_body": "Not specified in source",
+    }
+    for key, fallback in TEXT_FALLBACKS.items():
+        val = doc.get(key)
+        if (val is None or (isinstance(val, str) and not val.strip())) and len(fallback) <= 400:
+            doc[key] = fallback
+
+    # --- nested required non-nullable fields ----------------------------
+    for b in doc.get("benefits") or []:
+        if isinstance(b, dict):
+            note = b.get("eligibility_note")
+            if note is None or (isinstance(note, str) and not note.strip()):
+                b["eligibility_note"] = (
+                    "Refer to official scheme guidelines for detailed criteria."
+                )
+            if not str(b.get("benefit_id") or "").strip():
+                b["benefit_id"] = f"ben_{_slugify(b.get('description') or name)[:40]}"
+    for d in doc.get("required_documents") or []:
+        if isinstance(d, dict):
+            if d.get("notes") is None:
+                d["notes"] = "Not specified in source"
+            if not str(d.get("name") or "").strip():
+                d["name"] = "Document"
+            if not str(d.get("issuance_authority") or "").strip():
+                d["issuance_authority"] = "Not specified in source"
+            if not isinstance(d.get("alternatives"), list):
+                d["alternatives"] = []
+            # ``guide_url`` is nullable and the model readily invents a
+            # plausible-looking link.  A URL outside the *.gov.in / *.nic.in
+            # allowlist is an unverifiable guess, not scheme data, so it is
+            # dropped rather than indexed (the static half of V-CF7).
+            guide = d.get("guide_url")
+            if guide:
+                try:
+                    assert_allowed_gov_url(str(guide))
+                except SsrfBlocked:
+                    d["guide_url"] = None
+    return doc
 
 
 def _strip_fences(text: str) -> str:
@@ -463,32 +666,43 @@ async def llm_extract(
     *,
     previous: Mapping[str, Any] | None = None,
     violations: Sequence[Violation] = (),
+    source_url: str | None = None,
     http: httpx.AsyncClient | None = None,
 ) -> LLMOutput:
     """Stages 6–7 of §7.1: prompt → raw candidate + provenance + confidence.
 
     The single repair pass (§7.4) is the same call with the previous candidate
     and the ladder violations appended.
+
+    Transport is bounded by ``LLM_COMPLETION_TIMEOUT_MS`` (a full generation
+    budget), *not* by ``LLM_AUDIT_TIMEOUT_MS`` — that one prices a single
+    Semantic Auditor judgement and is typically an order of magnitude smaller.
     """
     s = get_settings()
     if not s.llm_base_url or not s.llm_api_key:
         raise LLMUnavailable("LLM_BASE_URL / LLM_API_KEY not configured")
 
-    prompt = build_prompt(markdown)
+    prompt = build_prompt(markdown, source_url)
     if previous is not None:
         prompt += (
             "\n\nYour previous attempt failed validation. Return a corrected JSON object only.\n"
             f"Previous candidate: {json.dumps(previous, ensure_ascii=False)}\n"
             f"Violations: {[v.tag() for v in violations]}"
         )
-    payload = {
+    payload: dict[str, Any] = {
         "model": s.llm_model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
         "response_format": {"type": "json_object"},
     }
+    # Optional provider reasoning budget; unsupported providers ignore unknown
+    # fields only if we ask, so it is omitted entirely when unset.
+    if s.llm_reasoning_effort.strip():
+        payload["reasoning_effort"] = s.llm_reasoning_effort.strip()
+
     owns = http is None
-    client = http or httpx.AsyncClient(timeout=httpx.Timeout(max(s.llm_audit_timeout_ms / 1000 + 30, 30)))
+    timeout_s = max(s.llm_completion_timeout_ms / 1000, 1.0)
+    client = http or httpx.AsyncClient(timeout=httpx.Timeout(timeout_s))
     try:
         try:
             resp = await client.post(
@@ -505,7 +719,14 @@ async def llm_extract(
     finally:
         if owns:
             await client.aclose()
-    return _parse_envelope(str(content))
+    out = _parse_envelope(str(content))
+    # Provenance is scored against the *model's own* claims, before
+    # `normalize_candidate` backfills gateway placeholders: a placeholder is
+    # not something the model traced to the source, so it must not be judged
+    # as a claim that lacks a span.
+    out.provenance = normalize_provenance(out.candidate, out.provenance)
+    out.candidate = normalize_candidate(out.candidate, source_url=source_url)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -669,7 +890,7 @@ async def ingest_markdown(
 
     # --- stages 6–7: extract --------------------------------------------
     try:
-        out = await llm(markdown)
+        out = await llm(markdown, source_url=source_url or None)
     except LLMUnavailable as exc:
         reason = f"L0:llm_unavailable:{exc}"[:200]
         if db is not None:
@@ -688,7 +909,8 @@ async def ingest_markdown(
         attempts += 1
         repaired = True
         try:
-            out = await llm(markdown, previous=raw, violations=result.violations)
+            out = await llm(markdown, previous=raw, violations=result.violations,
+                            source_url=source_url or None)
         except LLMUnavailable:
             break
         raw, provenance, confidence = out.candidate, out.provenance, out.parse_confidence

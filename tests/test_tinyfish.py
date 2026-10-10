@@ -126,7 +126,12 @@ def _search(handler, **kw):
 def test_search_filters_to_gov_in_hosts():
     from services.tinyfish.client import TinyFishSearchClient
 
+    seen: dict[str, str] = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"  # live endpoint is GET /?query=…
+        assert request.url.path == "/"
+        seen["query"] = request.url.params.get("query", "")
         return httpx.Response(
             200,
             json={
@@ -145,6 +150,7 @@ def test_search_filters_to_gov_in_hosts():
         return [h.url for h in hits]
 
     assert run(main()) == ["https://pmkisan.gov.in/apply", "https://services.punjab.gov.in/y"]
+    assert seen["query"] == "pm kisan"
 
 
 def test_search_sends_both_auth_headers():
@@ -220,11 +226,24 @@ def test_fetch_render_returns_markdown_and_content_hash():
     from services.tinyfish.client import TinyFishFetchClient
 
     def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/"  # live endpoint is POST /, not /render
         body = json.loads(request.content)
-        assert body["url"] == GOV_URL
+        assert body["urls"] == [GOV_URL]  # one-element array (§7.2)
         assert body["timeout_ms"] == 8000  # Tier-2 budget (§7.4)
         return httpx.Response(
-            200, json={"markdown": "# Pm Kisan\nbenefits", "final_url": GOV_URL, "http_status": 200}
+            200,
+            json={
+                "results": [
+                    {
+                        "url": GOV_URL,
+                        "final_url": GOV_URL,
+                        "text": "# Pm Kisan\nbenefits",
+                        "latency_ms": 42.0,
+                        "format": "markdown",
+                    }
+                ],
+                "errors": [],
+            },
         )
 
     async def main():
@@ -235,8 +254,32 @@ def test_fetch_render_returns_markdown_and_content_hash():
 
     res = run(main())
     assert res.markdown.startswith("# Pm Kisan")
-    assert res["http_status"] == 200
+    assert res["http_status"] == 200  # a returned result means it rendered
     assert len(res.content_hash) == 64  # sha256 fallback is computed, not empty
+
+
+def test_fetch_reports_the_status_when_the_portal_errors():
+    """An error entry still carries the portal's own HTTP status (§7.2)."""
+    from services.tinyfish.client import TinyFishFetchClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "results": [],
+                "errors": [{"url": GOV_URL, "error": "page_not_found", "status": 404}],
+            },
+        )
+
+    async def main():
+        async with TinyFishFetchClient(
+            api_key="k", base_url="https://f.test", http=_mock_client(handler)
+        ) as c:
+            return await c.render(GOV_URL)
+
+    res = run(main())
+    assert res["http_status"] == 404
+    assert res.markdown == ""
 
 
 def test_fetch_rejects_non_gov_url_before_any_network_call():
