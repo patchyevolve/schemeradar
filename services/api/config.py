@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_model: str = ""
     llm_audit_timeout_ms: int = 900
+    # Parser completion budget — deliberately *independent* of
+    # ``llm_audit_timeout_ms`` (which prices a single Semantic Auditor
+    # judgement, typically ~1 s).  The structured parser reads a multi-kilobyte
+    # prompt and must be allowed a full generation, so coupling the two would
+    # make every ingestion time out at the audit price.
+    llm_completion_timeout_ms: int = 30000
+    # Provider reasoning budget ("low" | "medium" | "high", "" = omit).
+    # Groq's gpt-oss family spends hidden reasoning tokens against the
+    # account TPM cap, so the effort level is part of the cost envelope.
+    llm_reasoning_effort: str = "low"
 
     # --- security -----------------------------------------------------------
     admin_service_token: str = ""

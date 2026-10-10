@@ -17,8 +17,10 @@ import hashlib
 import logging
 import random
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any, Iterable, Sequence
+from urllib.parse import urlencode
 
 import httpx
 
@@ -203,8 +205,10 @@ class _BaseClient:
                 pass
         return 0.0
 
-    async def _post_json(self, path: str, payload: dict[str, Any]) -> Any:
-        """POST with auth, tier budget and the §7.1/§7.2 retry policy.
+    async def _send(
+        self, method: str, path: str, payload: dict[str, Any] | None = None
+    ) -> Any:
+        """Auth, tier budget and the §7.1/§7.4 retry policy — **both verbs**.
 
         429 honours ``Retry-After`` first, then exponential backoff with jitter.
         401/403 are terminal (no retry). Everything else 5xx retries.
@@ -213,7 +217,10 @@ class _BaseClient:
         last: Exception | None = None
         for attempt in range(1, self.max_attempts + 1):
             try:
-                resp = await self._http.post(url, json=payload, headers=self._headers())
+                if method == "GET":
+                    resp = await self._http.get(url, headers=self._headers())
+                else:
+                    resp = await self._http.post(url, json=payload, headers=self._headers())
             except (httpx.TimeoutException, httpx.TransportError) as exc:
                 last = TinyFishUnavailable(f"{path}: {type(exc).__name__}: {exc}")
             else:
@@ -238,16 +245,14 @@ class _BaseClient:
                 await asyncio.sleep(self._backoff(attempt))
         raise last or TinyFishUnavailable(f"{path}: retries exhausted")
 
+    async def _post_json(self, path: str, payload: dict[str, Any]) -> Any:
+        return await self._send("POST", path, payload)
+
     def _backoff(self, attempt: int) -> float:
         return min(self.backoff_base_s * (2 ** (attempt - 1)), BACKOFF_CAP_S) + random.uniform(0, 0.05)
 
     async def _get(self, path: str) -> Any:
-        resp = await self._http.get(f"{self.base_url}{path}", headers=self._headers())
-        if resp.status_code in (401, 403):
-            raise TinyFishAuthError(f"{path}: HTTP {resp.status_code}")
-        if not resp.is_success:
-            raise TinyFishUnavailable(f"{path}: HTTP {resp.status_code}")
-        return resp.json()
+        return await self._send("GET", path)
 
 
 def _as_list(body: Any, *keys: str) -> list[dict[str, Any]]:
@@ -282,32 +287,40 @@ class TinyFishSearchClient(_BaseClient):
     ) -> list[SearchHit]:
         """``discover(query_templates[], recency_window, max_results) → SearchHit[]``.
 
+        The live endpoint takes **one** ``query`` per ``GET /?query=…`` and
+        ignores every limit parameter, so a multi-query discovery walks the
+        list sequentially inside the Tier-1 budget and truncates client-side.
+
         Only ``*.gov.in`` / ``*.nic.in`` hits survive post-processing
         (ARCHITECTURE §7.1 "Target web patterns").
         """
-        body = await self._post_json(
-            "/search",
-            {
-                "queries": list(queries),
-                "recency_window": recency_window,
-                "max_results": max_results,
-            },
-        )
         hits: list[SearchHit] = []
-        for raw in _as_list(body, "results", "hits", "data", "items"):
-            url = str(raw.get("url") or raw.get("link") or "")
-            if not GOV_HOST_PATTERN.match(url):
-                continue
-            hits.append(
-                SearchHit(
-                    url=url,
-                    title=str(raw.get("title") or ""),
-                    snippet=str(raw.get("snippet") or raw.get("description") or ""),
-                    published_at=raw.get("published_at") or raw.get("date"),
-                )
-            )
-            if len(hits) >= max_results:
+        seen: set[str] = set()
+        # §7.4 — the whole discovery, not each request, fits the Tier-1 budget.
+        deadline = time.monotonic() + (self.timeout_ms or TIER1_BUDGET_MS) / 1000
+        for query in queries:
+            if len(hits) >= max_results or time.monotonic() >= deadline:
                 break
+            params: dict[str, Any] = {"query": str(query)}
+            if recency_window:
+                # Accepted, but not applied upstream — see §7.1 deviation note.
+                params["recency_window"] = recency_window
+            body = await self._get("/?" + urlencode(params))
+            for raw in _as_list(body, "results", "hits", "data", "items"):
+                url = str(raw.get("url") or raw.get("link") or "")
+                if not GOV_HOST_PATTERN.match(url) or url in seen:
+                    continue
+                seen.add(url)
+                hits.append(
+                    SearchHit(
+                        url=url,
+                        title=str(raw.get("title") or ""),
+                        snippet=str(raw.get("snippet") or raw.get("description") or ""),
+                        published_at=raw.get("published_at") or raw.get("date"),
+                    )
+                )
+                if len(hits) >= max_results:
+                    break
         return hits
 
 
@@ -332,27 +345,56 @@ class TinyFishFetchClient(_BaseClient):
         """``render(url, timeout_ms, wait_for) → FetchResult`` (§7.2).
 
         The URL is SSRF-checked before it ever leaves this process (task 3.1).
+
+        The live endpoint is ``POST /`` with a ``urls`` **array** and answers
+        with ``{results: [{url, final_url, text, …}], errors: [{url, error,
+        status}]}`` — markdown lives under ``text``, and the HTTP status is
+        only carried for the failure entry.  A portal that answers with an
+        error still returns that status, so the caller records
+        ``http_status`` instead of collapsing a dead portal into a transport
+        exception.
         """
         assert_allowed_gov_url(url)
         budget = timeout_ms if timeout_ms is not None else (self.timeout_ms or TIER2_BUDGET_MS)
-        body = await self._post_json(
-            "/render",
-            {"url": url, "timeout_ms": budget, "wait_for": wait_for},
-        )
+        payload: dict[str, Any] = {"urls": [url], "timeout_ms": budget}
+        if wait_for:
+            payload["wait_for"] = wait_for
+        body = await self._post_json("/", payload)
         if not isinstance(body, dict):
             raise TinyFishUnavailable("fetch: response was not an object")
-        markdown = str(body.get("markdown") or body.get("content") or body.get("text") or "")
-        final_url = str(body.get("final_url") or body.get("url") or url)
-        status = body.get("http_status") or body.get("status") or 0
-        try:
-            status = int(status)
-        except (TypeError, ValueError):
-            status = 0
+
+        def _int(value: Any) -> int:
+            try:
+                return int(value)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                return 0
+
+        results = [r for r in (body.get("results") or []) if isinstance(r, dict)]
+        errors = [e for e in (body.get("errors") or []) if isinstance(e, dict)]
+        first = next((r for r in results if str(r.get("url") or "") == url), None)
+        first = first or (results[0] if results else None)
+        err = next((e for e in errors if str(e.get("url") or "") == url), None)
+        err = err or (errors[0] if errors else None)
+
+        if first is None and err is not None:
+            markdown, final_url, status = "", url, _int(err.get("status"))
+        elif first is None:
+            raise TinyFishUnavailable("fetch: no result and no error entry")
+        else:
+            markdown = str(first.get("text") or first.get("markdown") or first.get("content") or "")
+            final_url = str(first.get("final_url") or first.get("url") or url)
+            # The API only reports a status on the error entry; a returned
+            # result means the portal rendered (§7.2).
+            status = _int(err.get("status")) if err is not None else 200
+
         return FetchResult(
             markdown=markdown,
             final_url=final_url,
             http_status=status,
-            rendered_at=body.get("rendered_at")
-            or datetime.now(timezone.utc).isoformat(),
-            content_hash=str(body.get("content_hash") or _sha256(markdown)),
+            rendered_at=str(
+                body.get("rendered_at")
+                or (first.get("rendered_at") if first else None)
+                or datetime.now(timezone.utc).isoformat()
+            ),
+            content_hash=str((first or {}).get("content_hash") or _sha256(markdown)),
         )
