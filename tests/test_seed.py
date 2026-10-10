@@ -117,7 +117,8 @@ def test_seeding_is_idempotent_on_content_hash(capsys):
 
 
 def test_qdrant_holds_exactly_one_point_per_scheme():
-    """Re-running must not duplicate: 2 seeds ⇒ 2 points, forever."""
+    """Re-running must not duplicate: exactly one point per indexed scheme."""
+    from pymongo import MongoClient
     from qdrant_client import QdrantClient
 
     from services.api.config import get_settings
@@ -128,5 +129,18 @@ def test_qdrant_holds_exactly_one_point_per_scheme():
         info = client.get_collection(settings.qdrant_collection)
     except Exception as exc:  # pragma: no cover - depends on docker
         pytest.skip(f"Qdrant not reachable: {exc}")
-    assert info.points_count == 2, info.points_count
-    assert info.indexed_vectors_count is None or info.points_count == 2
+
+    # The invariant is "no duplicates", i.e. one point per *indexed* scheme.
+    # A hardcoded ``== 2`` only holds on a pristine database and breaks as
+    # soon as the seed corpus is populated — which is the whole point of
+    # batch ingestion.  Scheme ids are uuid5-derived, so a duplicate ingest
+    # of the same scheme rewrites its own point rather than adding one.
+    indexed = (
+        MongoClient(settings.mongo_uri)[settings.mongo_db]
+        .schemes.count_documents({"index_state": "indexed"})
+    )
+    assert info.points_count == indexed, (info.points_count, indexed)
+    assert (
+        info.indexed_vectors_count is None
+        or info.indexed_vectors_count <= info.points_count
+    )

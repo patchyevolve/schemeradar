@@ -1,0 +1,47 @@
+{
+  "version": 2,
+  "description": "High-yield organic queries for the hackathon persona corpus. Rigid site: operators were dropped after live verification: myscheme.gov.in serves an unhydrated React shell (~222 chars) and scholarships.gov.in serves scanned PDFs (0 chars). High-intent phrasing instead surfaces server-rendered HTML from PIB, Vikaspedia and ministry portals.",
+  "personas": [
+    "student",
+    "farmer",
+    "women_msme",
+    "senior_healthcare",
+    "bpl"
+  ],
+  "queries": [
+    { "persona": "farmer", "query": "PM Kisan eligibility benefits documents vikaspedia" },
+    { "persona": "farmer", "query": "PM Fasal Bima Yojana guidelines eligibility pib" },
+    { "persona": "farmer", "query": "Kisan Credit Card interest subsidy scheme details vikaspedia" },
+    { "persona": "farmer", "query": "Sub Mission on Agricultural Mechanization tractor subsidy eligibility" },
+    { "persona": "farmer", "query": "Pradhan Mantri Krishi Sinchayee Yojana components guidelines" },
+    { "persona": "farmer", "query": "Paramparagat Krishi Vikas Yojana organic farming financial assistance" },
+
+    { "persona": "student", "query": "Post Matric Scholarship SC students eligibility income ceiling vikaspedia" },
+    { "persona": "student", "query": "Central Sector Scheme of Scholarship for College and University Students eligibility" },
+    { "persona": "student", "query": "Pragati Scholarship for Girls AICTE eligibility amount documents" },
+    { "persona": "student", "query": "PM YASASVI scholarship scheme OBC EBC DNT eligibility criteria" },
+    { "persona": "student", "query": "National Means cum Merit Scholarship Scheme NMMS eligibility" },
+    { "persona": "student", "query": "Begum Hazrat Mahal National Scholarship girls eligibility criteria" },
+
+    { "persona": "women_msme", "query": "PM Mudra Yojana loan categories eligibility documents vikaspedia" },
+    { "persona": "women_msme", "query": "Stand Up India scheme SC ST women entrepreneurs guidelines" },
+    { "persona": "women_msme", "query": "Prime Minister Employment Generation Programme PMEGP subsidy eligibility" },
+    { "persona": "women_msme", "query": "Mahila Samridhi Yojana NBCFDC loan terms women eligibility" },
+    { "persona": "women_msme", "query": "Lakhpati Didi scheme benefits eligibility criteria pib" },
+    { "persona": "women_msme", "query": "PM Vishwakarma scheme trades financial support eligibility pib" },
+
+    { "persona": "senior_healthcare", "query": "Ayushman Bharat PMJAY eligibility entitlement criteria vikaspedia" },
+    { "persona": "senior_healthcare", "query": "Atal Pension Yojana contribution age pension tiers pib" },
+    { "persona": "senior_healthcare", "query": "Indira Gandhi National Old Age Pension Scheme IGNOAPS eligibility BPL" },
+    { "persona": "senior_healthcare", "query": "Rashtriya Vayoshri Yojana assisted living devices eligibility" },
+    { "persona": "senior_healthcare", "query": "Pradhan Mantri Vaya Vandana Yojana LIC pension terms" },
+    { "persona": "senior_healthcare", "query": "Senior Citizens Savings Scheme SCSS interest rate eligibility" },
+
+    { "persona": "bpl", "query": "PM Awas Yojana Gramin financial assistance eligibility SECC vikaspedia" },
+    { "persona": "bpl", "query": "PM SVANidhi street vendors micro credit scheme guidelines pib" },
+    { "persona": "bpl", "query": "Antyodaya Anna Yojana AAY ration entitlement BPL criteria" },
+    { "persona": "bpl", "query": "PM Ujjwala Yojana free LPG connection eligibility BPL women" },
+    { "persona": "bpl", "query": "Deendayal Antyodaya Yojana DAY NULM components guidelines" },
+    { "persona": "bpl", "query": "PM Garib Kalyan Anna Yojana foodgrains entitlement details" }
+  ]
+}

@@ -433,6 +433,14 @@ def run_ladder(
         except SsrfBlocked as exc:
             return LadderResult(False, "L4", [Violation("L4", "ssrf_blocked", str(exc),
                                                         "portal_url" if url == doc.get("portal_url") else "url")])
+        except OSError as exc:
+            # `getaddrinfo` raises `gaierror` when resolution transiently
+            # fails.  The docstring above is explicit that an exception *is*
+            # this layer's signal and must be converted to violations rather
+            # than escape the ladder, so a DNS blip becomes a fail-closed L4
+            # result instead of an unhandled crash in the caller.
+            return LadderResult(False, "L4", [Violation("L4", "dns_unavailable", str(exc),
+                                                        "portal_url" if url == doc.get("portal_url") else "url")])
 
     # --- L5 confidence gate (NO repair) ----------------------------------
     conf = parse_confidence if parse_confidence is not None else doc["parse"].get("parse_confidence")
@@ -661,6 +669,32 @@ def _parse_envelope(text: str) -> LLMOutput:
     return LLMOutput(candidate, provenance if isinstance(provenance, dict) else {}, conf_f)
 
 
+def _llm_error_detail(resp: httpx.Response) -> str:
+    """One-line reason from the provider's error body, truncated and secret-free.
+
+    The status code alone is actively misleading: Groq returns ``429`` both for
+    a per-minute window *and* for an exhausted **tokens-per-day** budget, and
+    only the body distinguishes them — along with a server-computed "try again
+    in Ns" that accounts for how large our request was.  Dropping the body made
+    every failure look like a short transient hiccup that backoff could clear,
+    when the real constraint was a rolling 24 h allowance no amount of
+    patience inside one run can restore.
+
+    Only ``error.message`` is surfaced: it carries the limit, not the key.
+    """
+    try:
+        payload = resp.json()
+    except Exception:
+        return (resp.text or "").strip()[:200] or "no body"
+    if isinstance(payload, dict):
+        err = payload.get("error")
+        if isinstance(err, dict) and err.get("message"):
+            return str(err["message"])[:300]
+        if isinstance(err, str) and err:
+            return err[:300]
+    return (resp.text or "").strip()[:200] or "no body"
+
+
 async def llm_extract(
     markdown: str,
     *,
@@ -713,7 +747,7 @@ async def llm_extract(
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             raise LLMUnavailable(f"LLM transport: {type(exc).__name__}") from exc
         if not resp.is_success:
-            raise LLMUnavailable(f"LLM HTTP {resp.status_code}")
+            raise LLMUnavailable(f"LLM HTTP {resp.status_code}: {_llm_error_detail(resp)}")
         body = resp.json()
         content = body["choices"][0]["message"]["content"]
     finally:
