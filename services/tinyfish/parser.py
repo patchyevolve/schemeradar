@@ -33,6 +33,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 import httpx
@@ -225,17 +226,110 @@ def cross_field_violations(candidate: Mapping[str, Any]) -> list[Violation]:
     return v
 
 
-def provenance_violations(
-    required: Sequence[str], provenance: Mapping[str, Any] | None
+def candidate_identity_violations(
+    candidate: Mapping[str, Any], fetch: Mapping[str, Any] | None
 ) -> list[Violation]:
-    """L3 half — every required field needs a non-null source span (§7.2 P4)."""
+    """Reject extraction of a different scheme than the candidate being ingested."""
+    expected = str((fetch or {}).get("candidate_name") or "").strip()
+    actual = str(candidate.get("name") or "").strip()
+    if not expected:
+        return []
+    stop = {"pradhan", "mantri", "yojana", "scheme", "national", "india", "mission", "programme", "program"}
+    tokens = lambda value: {
+        token for token in re.findall(r"[a-z0-9]+", value.lower())
+        if len(token) >= 4 and token not in stop
+    }
+    expected_tokens = tokens(expected)
+    actual_tokens = tokens(actual)
+    if expected_tokens and expected_tokens.intersection(actual_tokens):
+        return []
+    return [Violation(
+        "L3", "candidate_identity_mismatch",
+        f"extracted scheme name {actual!r} does not match candidate {expected!r}", "name",
+    )]
+
+
+def source_coverage_review_violation(fetch: Mapping[str, Any] | None) -> Violation | None:
+    """Keep incompletely documented candidates out of the citizen index.
+
+    A source packet may contain enough to parse a candidate while still lacking
+    an exhaustive document checklist. Preserve that candidate for HRQ review
+    instead of treating an empty/partial list as "no documents required".
+    """
+    payload = fetch or {}
+    field_evidence = payload.get("field_evidence") or {}
+    document_evidence = field_evidence.get("document_checklist") or {}
+    document_status = document_evidence.get("status")
+    if document_status:
+        if document_status == "checklist_passage_found":
+            return None
+    else:
+        coverage = payload.get("evidence_coverage") or {}
+        document_status = (coverage.get("document_checklist") or {}).get("status")
+        # Legacy callers have only lexical coverage. Do not interpret one
+        # keyword hit as proof of a complete checklist.
+        if document_status == "signal_found":
+            document_status = "partial_or_unverified"
+    if not document_status:
+        return None
+    return Violation(
+        "L3", "source_coverage_incomplete",
+        f"document checklist coverage is {document_status}; verify before citizen indexing",
+        "required_documents",
+    )
+
+
+def provenance_violations(
+    required: Sequence[str], provenance: Mapping[str, Any] | None,
+    *, source_text: str | None = None, candidate: Mapping[str, Any] | None = None,
+) -> list[Violation]:
+    """L3 provenance gate: claimed required fields need a verbatim source span."""
     if provenance is None:
         return [Violation("L3", "provenance_missing", "no parse_provenance sidecar returned", None)]
-    return [
-        Violation("L3", "provenance_span_absent", f"required field {k} has no source span", k)
-        for k in required
-        if provenance.get(k) is None or not str(provenance.get(k)).strip()
-    ]
+    violations: list[Violation] = []
+    source_norm = " ".join((source_text or "").split())
+    for key in required:
+        # IDs and schema metadata are synthesized by the gateway after model
+        # extraction. They are not claims about the source and cannot have a
+        # source quote; asking the model to cite them creates avoidable HRQs.
+        if key in _DERIVED_KEYS:
+            continue
+        span = str(provenance.get(key) or "").strip()
+        value = candidate.get(key) if candidate is not None else None
+        claimed = candidate is None or _is_claimed(value)
+        # Composite arrays/objects are evidenced by their factual scalar
+        # leaves. Requiring a second quote for the parent duplicates evidence
+        # and caused valid lists such as benefits[] to fail when each amount,
+        # cadence, and condition already had its own quote.
+        if candidate is not None and isinstance(value, (Mapping, list)):
+            prefix = key + ("[" if isinstance(value, list) else ".")
+            child_paths = [
+                path for path, _child in _claimed_leaf_paths(value, key)
+                if path.startswith(prefix)
+            ]
+            if child_paths:
+                continue
+        if not span or (span == NOT_STATED_SPAN and claimed):
+            violations.append(Violation("L3", "provenance_span_absent",
+                                        f"required field {key} has no source span", key))
+            continue
+        if source_text is not None and claimed:
+            span_norm = " ".join(span.split())
+            if len(span) > 200 or span_norm not in source_norm:
+                violations.append(Violation("L3", "provenance_span_not_in_source",
+                                            f"source span for {key} is not an exact quote", key))
+    if source_text is not None and candidate is not None:
+        for path, _value in _claimed_leaf_paths(candidate):
+            if path in required:
+                continue
+            span = str(provenance.get(path) or "").strip()
+            span_norm = " ".join(span.split())
+            if not span or len(span) > 200 or span_norm not in source_norm:
+                violations.append(Violation(
+                    "L3", "provenance_span_not_in_source",
+                    f"no exact source quote for claimed field {path}", path,
+                ))
+    return violations
 
 
 # ---------------------------------------------------------------------------
@@ -284,9 +378,9 @@ def apply_server_defaults(
     doc["created_at"] = now
     doc["updated_at"] = now
 
-    # 2) lifecycle flags — the ladder only ever runs on an accept path
+    # 2) lifecycle flags — preserve the extracted scheme-level status.
     doc["index_state"] = "indexed"
-    doc["is_active"] = True
+    doc["is_active"] = doc.get("status") == "active"
 
     # 3) verification state.  ``verified_at`` is a gateway stamp: Tier 2 has
     #    just rendered the portal, so "now" is the honest instant and an LLM
@@ -298,8 +392,9 @@ def apply_server_defaults(
     #    (§2.4) inspects the candidate's asserted status, so forcing it to
     #    UNVERIFIED would make that frozen invariant untestable and would
     #    discard the portal's own claim.  It defaults only when absent.
-    doc["verified_at"] = now
-    doc.setdefault("verification_status", "UNVERIFIED")
+    # Tier 2 only fetched content; live intake status must come from Tier 3.
+    doc["verified_at"] = None
+    doc["verification_status"] = "UNVERIFIED"
     for k in ("extracted_deadline", "snapshot_url", "verification_job_id",
               "last_known_status"):
         doc[k] = None
@@ -322,7 +417,11 @@ def apply_server_defaults(
     #    reject path, so the gateway adapts the digest to the schema form.
     src: dict[str, Any] = dict(doc.get("source") or {})
     if fetch is not None:
-        src["url"] = str(fetch.get("final_url") or fetch.get("url") or "")
+        # Keep the official requested URL as the durable citation. Some
+        # government CDNs redirect to a raw IP or a noncanonical mirror URL;
+        # preserve that separately in the revision evidence metadata.
+        src["url"] = str(fetch.get("source_url") or fetch.get("requested_url")
+                         or fetch.get("final_url") or fetch.get("url") or "")
         src["content_hash"] = _schema_content_hash(str(fetch.get("content_hash") or ""))
     else:
         src.setdefault("url", "")
@@ -417,7 +516,8 @@ def run_ladder(
 
     # --- L3 cross-field & provenance -------------------------------------
     l3 = cross_field_violations(doc)
-    l3 += provenance_violations(required, provenance)
+    l3 += candidate_identity_violations(doc, fetch)
+    l3 += provenance_violations(required, provenance, candidate=doc)
     if l3:
         return LadderResult(False, "L3", l3)
 
@@ -425,6 +525,10 @@ def run_ladder(
     urls = [doc.get("portal_url"), (doc.get("source") or {}).get("url")]
     urls += list(doc.get("alternate_urls") or [])
     urls += [d.get("guide_url") for d in (doc.get("required_documents") or [])]
+    urls += [
+        source.get("url") for source in ((fetch or {}).get("source_documents") or [])
+        if isinstance(source, Mapping)
+    ]
     for url in (u for u in urls if u):
         try:
             assert_allowed_gov_url(str(url))
@@ -481,6 +585,34 @@ def _is_claimed(value: Any) -> bool:
     return True
 
 
+_DERIVED_KEYS = frozenset({
+    "schema_version", "scheme_id", "slug", "benefit_id", "document_id",
+    "rule_id", "clause_id", "override_id", "penalty_per_document",
+    "requirement_weight",
+})
+
+
+def _claimed_leaf_paths(value: Any, prefix: str = "") -> list[tuple[str, Any]]:
+    """Return factual scalar leaves that need their own evidence citation."""
+    if isinstance(value, Mapping):
+        rows: list[tuple[str, Any]] = []
+        for raw_key, child in value.items():
+            key = str(raw_key)
+            if key in _DERIVED_KEYS or key in SERVER_OWNED or key == "source":
+                continue
+            path = f"{prefix}.{key}" if prefix else key
+            rows.extend(_claimed_leaf_paths(child, path))
+        return rows
+    if isinstance(value, list):
+        rows: list[tuple[str, Any]] = []
+        for i, child in enumerate(value):
+            rows.extend(_claimed_leaf_paths(child, f"{prefix}[{i}]"))
+        return rows
+    if prefix and _is_claimed(value):
+        return [(prefix, value)]
+    return []
+
+
 def normalize_provenance(
     candidate: Mapping[str, Any], provenance: Mapping[str, Any] | None
 ) -> dict[str, Any]:
@@ -508,10 +640,9 @@ def build_prompt(markdown: str, source_url: str | None = None) -> str:
 
     The schema is emitted with compact separators — whitespace is not part of
     the document, and the ~7% it saves is real input budget on metered LLM
-    endpoints.  ``source_url`` is the canonical URL Tier 2 rendered: it is a
-    fact about the source, so the model can populate ``portal_url`` truthfully
-    instead of guessing (that field is required, non-nullable and pattern-
-    locked to ``*.gov.in`` / ``*.nic.in``, so a guess is an L2 failure).
+    endpoints. ``source_url`` is the evidence page Tier 2 rendered. It is not
+    automatically the citizen's application portal; that URL must be found in
+    the page or the candidate is routed to review.
     """
     schema = json.dumps(_schema(), ensure_ascii=False, separators=(",", ":"))
     out = (
@@ -520,20 +651,48 @@ def build_prompt(markdown: str, source_url: str | None = None) -> str:
         '  "scheme"           — the Scheme object, matching the JSON Schema below EXACTLY\n'
         '  "provenance"       — {field_name: exact quoted source span (<=200 chars)} for EVERY required field\n'
         '  "parse_confidence" — your self-reported confidence in [0,1]\n\n'
+        "The `scheme` value itself contains ONLY schema properties. Keep `provenance` and "
+        "`parse_confidence` beside `scheme` in the outer object; never put either inside `scheme`.\n"
+        "Do not cite gateway-derived metadata such as schema_version, scheme_id, or slug.\n"
         "Rules (DATA_SPEC §7.2):\n"
         "- additionalProperties is false: an extra key is a FAILURE.\n"
         '- Emit JSON null for a *nullable* field the source does not state. Never 0, never "", never a guess.\n'
-        "- Every field listed in `required` whose type is not `null` MUST be a "
-        "non-null value of its declared type — a null there is a type FAILURE. "
-        "When the source genuinely does not state one, give a short factual "
-        "placeholder (e.g. eligibility_note: \"Refer to official scheme "
-        "guidelines for detailed criteria.\") rather than null.\n"
-        "- `provenance` MUST contain an entry for every key in the schema's "
-        "`required` list — including fields whose value is null. For an "
-        "unstated field quote the nearest relevant source text (a heading or "
-        "surrounding sentence); never omit the key.\n"
+        "- Every non-null factual field must be supported by the fetched source. "
+        "Never invent a placeholder for eligibility limits, benefits, documents, "
+        "or application instructions. If a required fact is unavailable, return "
+        "null or an empty value so validation routes the candidate for review.\n"
+        "- `portal_url` means the citizen-facing application/registration portal, "
+        "not the page currently being fetched unless that page actually accepts "
+        "applications. Do not copy SOURCE URL as portal_url by default.\n"
+        "- Every non-null factual claim must have a quote copied verbatim from "
+        "SOURCE MARKDOWN; do not cite SOURCE URL as eligibility evidence. "
+        "Unsupported claims must be null or sent for review. Claimed-field "
+        "spans are checked against the fetched text. The provenance object must "
+        "include a separate exact-quote entry for EVERY non-null factual scalar, "
+        "including every leaf inside arrays and objects; a citation for the parent "
+        "object does not cover its children. Use flattened indexed keys such as "
+        '"benefits[0].amount_inr": "₹6,000 per year" and '
+        '"required_documents[0].name": "Aadhaar card". '
+        "Do not omit a nested citation just because the parent has one.\n"
+        "- For normalized enum arrays, cite the source wording that supports each "
+        "array member. Use gender=[ALL] or domicile_state=[ALL] only when the "
+        "source explicitly establishes unrestricted gender or nationwide scope. "
+        "Do not assume social categories, gender, states, or occupations from "
+        "silence; if the schema cannot represent the unknown value, leave it "
+        "empty/null as allowed and let validation route the record for review.\n"
+        "- `provenance` MUST contain an entry for every factual key in the "
+        "schema's `required` list. For a null/empty value not stated in the "
+        "source, use exactly `Not stated in the source.`; do not attach an "
+        "unrelated quote. Every claimed value still needs its own exact quote.\n"
         "- Enums are closed sets — never invent one.\n"
         "- Normalise money to integer INR, dates to YYYY-MM-DD, FY to YYYY-YY.\n"
+        "- `required_documents[].penalty_per_document` and `requirement_weight` are "
+        "derived scoring metadata, not facts to quote from the source. Set the penalty "
+        "inside the exact tier band: tier 0 = 0.00; tier 1 = 0.05; tier 2 = 0.10–0.15; "
+        "tier 3 = 0.15–0.25; tier 4 = 0.25–0.35. Set requirement_weight to 1.0 for "
+        "mandatory documents, 0.0 for optional/recommended documents, and 0.5 only "
+        "when a declared alternative exists. Do not invent document requirements to "
+        "fill these scoring fields.\n"
         "- No prose, no markdown fences, JSON only.\n\n"
         f"JSON Schema:\n{schema}\n\n"
     )
@@ -586,8 +745,9 @@ def normalize_candidate(
     doc["schema_version"] = "1.0.0"
 
     # --- top level, derivable -------------------------------------------
-    if not str(doc.get("portal_url") or "").strip() and source_url:
-        doc["portal_url"] = str(source_url)
+    # Keep the fetched evidence URL separate from the citizen's application
+    # destination. If the extractor cannot identify the portal, validation
+    # sends this candidate to review rather than using a press release as a CTA.
     if not str(doc.get("slug") or "").strip():
         doc["slug"] = slug
     if not str(doc.get("scheme_id") or "").strip():
@@ -595,36 +755,15 @@ def normalize_candidate(
     if not str(doc.get("fiscal_year") or "").strip():
         doc["fiscal_year"] = _current_fiscal_year()
 
-    # --- free-text required strings: a non-empty factual placeholder ----
-    TEXT_FALLBACKS = {
-        "benefits_summary": f"Benefits of {name or 'the scheme'} as stated on the official portal.",
-        "eligibility_text": "Refer to the official scheme guidelines for detailed eligibility criteria.",
-        "department": "Not specified in source",
-        "sponsoring_body": "Not specified in source",
-    }
-    for key, fallback in TEXT_FALLBACKS.items():
-        val = doc.get(key)
-        if (val is None or (isinstance(val, str) and not val.strip())) and len(fallback) <= 400:
-            doc[key] = fallback
-
-    # --- nested required non-nullable fields ----------------------------
+    # Do not synthesize fact-like placeholders. Missing department, benefit,
+    # eligibility, or document details must fail schema/provenance validation
+    # and enter review instead of becoming plausible-looking citizen data.
     for b in doc.get("benefits") or []:
         if isinstance(b, dict):
-            note = b.get("eligibility_note")
-            if note is None or (isinstance(note, str) and not note.strip()):
-                b["eligibility_note"] = (
-                    "Refer to official scheme guidelines for detailed criteria."
-                )
             if not str(b.get("benefit_id") or "").strip():
                 b["benefit_id"] = f"ben_{_slugify(b.get('description') or name)[:40]}"
     for d in doc.get("required_documents") or []:
         if isinstance(d, dict):
-            if d.get("notes") is None:
-                d["notes"] = "Not specified in source"
-            if not str(d.get("name") or "").strip():
-                d["name"] = "Document"
-            if not str(d.get("issuance_authority") or "").strip():
-                d["issuance_authority"] = "Not specified in source"
             if not isinstance(d.get("alternatives"), list):
                 d["alternatives"] = []
             # ``guide_url`` is nullable and the model readily invents a
@@ -653,11 +792,25 @@ def _parse_envelope(text: str) -> LLMOutput:
     if not isinstance(body, dict):
         raise LLMUnavailable("LLM returned a non-object")
     if "scheme" in body:
-        candidate = body.get("scheme") or {}
-        provenance = body.get("provenance") or {}
-        conf = body.get("parse_confidence")
+        raw_candidate = body.get("scheme") or {}
+        candidate = dict(raw_candidate) if isinstance(raw_candidate, dict) else raw_candidate
+        # Smaller instruction models sometimes nest wrapper metadata inside
+        # `scheme` despite the prompt. Recover only these known envelope keys;
+        # all remaining extra schema keys still fail L1, and all recovered
+        # evidence is checked by the usual exact-span gate.
+        embedded_provenance = candidate.pop("provenance", None) if isinstance(candidate, dict) else None
+        embedded_confidence = candidate.pop("parse_confidence", None) if isinstance(candidate, dict) else None
+        outer_provenance = body.get("provenance")
+        if isinstance(embedded_provenance, dict) or isinstance(outer_provenance, dict):
+            provenance = {**(embedded_provenance if isinstance(embedded_provenance, dict) else {}),
+                          **(outer_provenance if isinstance(outer_provenance, dict) else {})}
+        else:
+            provenance = {}
+        conf = body.get("parse_confidence", embedded_confidence)
     else:  # model ignored the envelope — still usable, but fail closed on L5
-        candidate, provenance, conf = body, {}, None
+        candidate = dict(body)
+        provenance = candidate.pop("provenance", {})
+        conf = candidate.pop("parse_confidence", None)
     if conf is None:
         conf = (candidate.get("parse") or {}).get("parse_confidence")
     try:
@@ -686,13 +839,52 @@ def _llm_error_detail(resp: httpx.Response) -> str:
         payload = resp.json()
     except Exception:
         return (resp.text or "").strip()[:200] or "no body"
+    def retry_hint(value: Any) -> str | None:
+        if isinstance(value, Mapping):
+            for key, item in value.items():
+                if str(key).lower().replace("_", "") in {"retrydelay", "retryafter"}:
+                    if isinstance(item, str | int | float):
+                        return str(item)
+                nested = retry_hint(item)
+                if nested:
+                    return nested
+        elif isinstance(value, list):
+            for item in value:
+                nested = retry_hint(item)
+                if nested:
+                    return nested
+        return None
+
     if isinstance(payload, dict):
         err = payload.get("error")
-        if isinstance(err, dict) and err.get("message"):
-            return str(err["message"])[:300]
-        if isinstance(err, str) and err:
-            return err[:300]
-    return (resp.text or "").strip()[:200] or "no body"
+        if isinstance(err, dict):
+            detail = str(err.get("message") or "provider error")
+            hint = retry_hint(err.get("details"))
+        elif isinstance(err, str) and err:
+            detail, hint = err, retry_hint(payload)
+        else:
+            detail, hint = (resp.text or "").strip()[:200] or "no body", retry_hint(payload)
+    else:
+        detail, hint = (resp.text or "").strip()[:200] or "no body", None
+
+    header = resp.headers.get("Retry-After") or resp.headers.get("retry-after-ms")
+    if header:
+        if resp.headers.get("retry-after-ms") and header.replace(".", "", 1).isdigit():
+            hint = f"{float(header) / 1000:g}s"
+        elif header.replace(".", "", 1).isdigit():
+            hint = f"{float(header):g}s"
+        else:
+            try:
+                when = parsedate_to_datetime(header)
+                if when.tzinfo is None:
+                    when = when.replace(tzinfo=timezone.utc)
+                seconds = max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+                hint = f"{seconds:g}s"
+            except (TypeError, ValueError, OverflowError):
+                pass
+    if hint and not re.search(r"(?:retry|try again)", detail, re.I):
+        detail = f"{detail[:240]} retry after {hint}"
+    return detail[:300]
 
 
 async def llm_extract(
@@ -727,6 +919,10 @@ async def llm_extract(
         "model": s.llm_model,
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
+        # Requesty-routed models may require explicit greedy-sampling top_p.
+        # 1.0 preserves temperature-only deterministic behavior while keeping
+        # providers that enforce this constraint compatible.
+        "top_p": 1,
         "response_format": {"type": "json_object"},
     }
     # Optional provider reasoning budget; unsupported providers ignore unknown
@@ -851,6 +1047,8 @@ def commit_accepted(
     scheme: Mapping[str, Any],
     *,
     fetch: Mapping[str, Any] | None = None,
+    provenance: Mapping[str, Any] | None = None,
+    candidate_json: Mapping[str, Any] | None = None,
     indexer: Callable[[Scheme], Any] | None = None,
 ) -> Scheme:
     """Accept path — Phase 1 §3.1 write ordering: MongoDB commit, then index.
@@ -872,6 +1070,36 @@ def commit_accepted(
         src["parser_version"] = PARSER_VERSION
         doc["source"] = src
     db.schemes.replace_one({"scheme_id": doc["scheme_id"]}, doc, upsert=True)
+    revisions = db.scheme_revisions
+    previous = revisions.find_one({"scheme_id": doc["scheme_id"]}, sort=[("revision", -1)])
+    revision = int((previous or {}).get("revision", 0)) + 1
+    evidence_sources = list((fetch or {}).get("source_documents") or [])
+    field_source_map: dict[str, list[str]] = {}
+    source_texts = [
+        (str(source.get("url") or ""), " ".join(str(source.get("evidence_excerpt") or "").split()))
+        for source in evidence_sources if isinstance(source, Mapping)
+    ]
+    for field, raw_quote in (provenance or {}).items():
+        quote = " ".join(str(raw_quote or "").split())
+        if not quote or quote == NOT_STATED_SPAN:
+            continue
+        matched = [url for url, body in source_texts if url and quote in body]
+        if matched:
+            field_source_map[str(field)] = matched
+    revisions.insert_one({
+        "revision_id": uuid.uuid4().hex,
+        "scheme_id": doc["scheme_id"],
+        "revision": revision,
+        "seed_query": (fetch or {}).get("seed_query"),
+        "content_hash": (fetch or {}).get("content_hash") or doc["source"]["content_hash"],
+        "parser_version": PARSER_VERSION,
+        "parse_provenance": dict(provenance or {}),
+        "evidence_sources": evidence_sources,
+        "evidence_coverage": dict((fetch or {}).get("evidence_coverage") or {}),
+        "field_source_map": field_source_map,
+        "candidate_json": dict(candidate_json or scheme),
+        "accepted_at": now,
+    })
     if indexer is not None:
         indexer(model)
     return model
@@ -935,8 +1163,19 @@ async def ingest_markdown(
     raw, provenance, confidence = out.candidate, out.provenance, out.parse_confidence
 
     # --- stage 8: ladder + one repair ------------------------------------
-    result = run_ladder(raw, provenance=provenance, parse_confidence=confidence,
-                        fetch=fetch, check_dns=check_dns, resolver=resolver)
+    def validate_candidate() -> LadderResult:
+        checked = run_ladder(raw, provenance=provenance, parse_confidence=confidence,
+                             fetch=fetch, check_dns=check_dns, resolver=resolver)
+        if checked.ok:
+            evidence = provenance_violations(
+                extractable_required(), provenance,
+                source_text=markdown, candidate=raw,
+            )
+            if evidence:
+                return LadderResult(False, "L3", evidence)
+        return checked
+
+    result = validate_candidate()
     attempts = 0
     repaired = False
     while not result.ok and result.layer in {"L1", "L2", "L3"} and attempts < MAX_REPAIR_ATTEMPTS:
@@ -948,8 +1187,14 @@ async def ingest_markdown(
         except LLMUnavailable:
             break
         raw, provenance, confidence = out.candidate, out.provenance, out.parse_confidence
-        result = run_ladder(raw, provenance=provenance, parse_confidence=confidence,
-                            fetch=fetch, check_dns=check_dns, resolver=resolver)
+        result = validate_candidate()
+
+    coverage_violation = source_coverage_review_violation(fetch)
+    if result.ok and coverage_violation is not None:
+        # Parsing succeeded, but a partial/unknown document list is not safe to
+        # show as the complete citizen checklist. This follows the ordinary
+        # HRQ path (Mongo only, never Qdrant) and retains the parsed evidence.
+        result = LadderResult(False, "L3", [coverage_violation])
 
     if not result.ok or result.scheme is None:
         # --- fail-closed: MongoDB only, no embedding, no Qdrant -----------
@@ -966,8 +1211,10 @@ async def ingest_markdown(
 
     # --- accept: MongoDB commit, then indexer (embed → Qdrant) -----------
     if db is not None:
-        model = commit_accepted(db, result.scheme.model_dump(mode="json"), fetch=fetch,
-                                indexer=indexer)
+        model = commit_accepted(
+            db, result.scheme.model_dump(mode="json"), fetch=fetch,
+            provenance=provenance, candidate_json=raw, indexer=indexer,
+        )
         log_ingestion(db, stage="parse", result="repaired" if repaired else "ok",
                       scheme_id=model.scheme_id, source_url=source_url,
                       content_hash=(fetch or {}).get("content_hash"), duration_ms=ms())

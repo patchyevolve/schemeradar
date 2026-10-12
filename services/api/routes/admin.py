@@ -183,7 +183,10 @@ async def refresh_pipeline(job_id: str, query: str, max_results: int) -> None:
     try:
         # --- Tier 1: Search -------------------------------------------
         report["stage"] = "search"
-        hits = await _search_client().discover([query], max_results=max_results)
+        discovery_query = (
+            f"{query} official scheme eligibility benefits application guidelines FAQ"
+        )
+        hits = await _search_client().discover([discovery_query], max_results=max_results)
         report["hits"] = [str(h.url) for h in hits]
         if not hits:
             report.update(status="completed", stage="done", note="no_gov_hits")

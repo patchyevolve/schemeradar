@@ -1,0 +1,141 @@
+{
+  "generated_at": "2026-10-11T13:00:26.382154+00:00",
+  "mode": "coverage_only",
+  "llm_calls": 0,
+  "database_writes": 0,
+  "records": [
+    {
+      "index": 1,
+      "persona": "farmer",
+      "query": "PM Kisan eligibility benefits documents vikaspedia",
+      "candidate_name": "Pradhan Mantri Kisan Samman Nidhi",
+      "catalog_status": "source_ready",
+      "result": "ready_for_parse_with_document_review",
+      "scheme_id": null,
+      "ms": 130703,
+      "discovery_query": "PM Kisan eligibility benefits documents vikaspedia official scheme eligibility benefits application guidelines FAQ",
+      "evidence_coverage": {
+        "scheme_identity": {
+          "status": "signal_found",
+          "matched_passages": [
+            "The Union Cabinet chaired by the Prime Minister Shri Narendra Modi has approved continuation of the Pradhan Mantri Kisan Samman Nidhi (PM-KISAN) Scheme from 2026–27 to 2030–31.",
+            "# Eligibility Criteria of PM-KISAN"
+          ]
+        },
+        "eligibility": {
+          "status": "signal_found",
+          "matched_passages": [
+            "liability towards transfer of benefit to targeted beneficiaries will be borne by",
+            "b) The eligible farmers may apply with the village Patwaris, revenue officials or other"
+          ]
+        },
+        "benefits": {
+          "status": "signal_found",
+          "matched_passages": [
+            "financial benefit of Rs.6000/- per annum per family payable in three equal installments",
+            "The PM-KISAN scheme is a central sector scheme launched in February 2019 by the Hon’ble Prime Minister to supplement the financial needs of cultivable land-holding farmers. Under the scheme, a financial benefit of Rs 6,000/- per year is transferred in three equal instalments, into the Aadhaar seeded bank accounts of farmers through Direct Benefit Transfer (D"
+          ],
+          "warnings": [
+            "Rendered source contained ambiguous Rs.60001; two separate official sources support Rs.6000. Keep the malformed rendering in the audit trail."
+          ]
+        },
+        "document_checklist": {
+          "status": "partial_rule_only",
+          "matched_passages": [
+            "Aadhaar number shall be collected for those beneficiaries where it is available"
+          ]
+        },
+        "individual_document_rule": {
+          "status": "signal_found",
+          "matched_passages": [
+            "Aadhaar number shall be collected for those beneficiaries where it is available"
+          ]
+        },
+        "application_route": {
+          "status": "signal_found",
+          "matched_passages": [
+            "b) The eligible farmers may apply with the village Patwaris, revenue officials or other",
+            "b) The eligible farmers may apply with the village Patwaris, revenue officials or other"
+          ]
+        },
+        "continuation": {
+          "status": "signal_found",
+          "matched_passages": [
+            "The Union Cabinet chaired by the Prime Minister Shri Narendra Modi has approved continuation of the Pradhan Mantri Kisan Samman Nidhi (PM-KISAN) Scheme from 2026–27 to 2030–31."
+          ]
+        }
+      },
+      "coverage_searches": [
+        {
+          "field": "benefits",
+          "query": "Pradhan Mantri Kisan Samman Nidhi exact benefit amount annual instalments official latest government",
+          "result": "evidence_added",
+          "field_status": "signal_found",
+          "source_url": "https://www.pib.gov.in/Pressreleaseshare.aspx?PRID=1562184"
+        },
+        {
+          "field": "document_checklist",
+          "query": "Pradhan Mantri Kisan Samman Nidhi complete documents required checklist registration official government",
+          "result": "no_parseable_source"
+        },
+        {
+          "field": "continuation",
+          "query": "Pradhan Mantri Kisan Samman Nidhi latest current status continuation scheme period official government",
+          "result": "evidence_added",
+          "field_status": "signal_found",
+          "source_url": "https://www.pmindia.gov.in/en/news_updates/cabinet-approves-continuation-of-the-pm-kisan-scheme-from-2026-27-to-2030-31-with-a-financial-outlay-of-rs-3-15-lakh-crore/"
+        }
+      ],
+      "coverage_warnings": [
+        "Official evidence supports an individual document/data rule, but not an exhaustive checklist."
+      ],
+      "source_documents": [
+        {
+          "url": "https://pmkisan.gov.in/Documents/RevisedFAQ.pdf",
+          "fetched_url": "https://34.93.80.85/Documents/RevisedFAQ.pdf",
+          "content_hash": "8ad5c2f69161a56e9821db5a58b6c3d7f8158faa6fcc0518a8b687bd2f212fde",
+          "title": null,
+          "role": "faq",
+          "fetched_at": "2026-10-11T12:58:18.342265+00:00",
+          "extraction_method": "tinyfish_render",
+          "visible_chars": 19110,
+          "evidence_excerpt": "Rs.10,000/-or more(Excluding Ir/ulti Tasking\nliability towards transfer of benefit to targeted beneficiaries will be borne by\nb) The eligible farmers may apply with the village Patwaris, revenue officials or other\nAadhaar number shall be collected for those beneficiaries where it is available\nemployees of the Local Bodies are not eligible to get benefit under the scheme\nare eligible to get benefit under the Scheme, provided their families are otherwise\n01 .02.2019 and no changes thereafter shall be considered for eligibility of benefit\nls an income tax payee farmer or his / her spouse eligible to get benefit\nlandholding whether each farmer's family is eligible to get benefit of the\nb) The eligible farmers may apply with the village Patwaris, revenue officials or other"
+        },
+        {
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2146932",
+          "fetched_url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2146932&reg=48&lang=2",
+          "content_hash": "1c30ae1b755c314307ccea28386852b0f2b6774d6d1a830e6dfde6062e84caf5",
+          "title": "Eligibility Criteria of PM-KISAN",
+          "role": "press_release",
+          "fetched_at": "2026-10-11T12:58:20.942340+00:00",
+          "extraction_method": "tinyfish_render",
+          "visible_chars": 3641,
+          "evidence_excerpt": "Under the scheme, a financial benefit of Rs 6,000/- per year is transferred in three equal instalments, into the Aadhaar seeded bank accounts of farmers through Direct Benefit Transfer (DBT) mode.\n# Eligibility Criteria of PM-KISAN\nApart from the PM-KISAN grievance module, farmers can also register their grievances through Centralized Public Grievance Redress and Monitoring System (CPGRAMS) Portal.\nFarmers Welfare\n# Eligibility Criteria of PM-KISAN\nUnder the scheme, a financial benefit of Rs 6,000/- per year is transferred in three equal instalments, into the Aadhaar seeded bank accounts of farmers through Direct Benefit Transfer (DBT) mode.\n23,000 Crore.\nThere is a dedicated grievance module on the PM-KISAN Portal for raising grievances by the farmers."
+        },
+        {
+          "url": "https://www.pib.gov.in/Pressreleaseshare.aspx?PRID=1562184",
+          "fetched_url": "https://www.pib.gov.in/Pressreleaseshare.aspx?PRID=1562184&reg=48&lang=2",
+          "content_hash": "bf85381072fdd1a178558226794244ab6d4b0e57229a258b62efbffd36993182",
+          "title": "Pradhan Mantri Kisan Samman Nidhi announced to provide assured income support to small and marginal farmers",
+          "role": "press_release",
+          "fetched_at": "2026-10-11T12:58:23.940183+00:00",
+          "extraction_method": "tinyfish_render",
+          "visible_chars": 3071,
+          "evidence_excerpt": "This programme will entail an annual expenditure of Rs.75,000 crore”.\nThis income support will be transferred directly into the bank accounts of beneficiary farmers, in three equal instalments of Rs.\nWhile presenting the Interim Budget 2019-20 in Parliament today the Union Minister for Finance, Corporate Affairs, Railways & Coal, Shri Piyush Goyal said, “Under this programme, vulnerable landholding farmer families, having cultivable land upto 2 hectares, will be provided direct income support at the rate of Rs.\n6,000 per year.\nThis programme will entail an annual expenditure of Rs.75,000 crore”.\nNow, I propose to provide the benefit of 2% interest subvention to the farmers pursuing the activities of animal husbandry and fisheries, who avail loan through Kisan Credit Card"
+        },
+        {
+          "url": "https://www.pmindia.gov.in/en/news_updates/cabinet-approves-continuation-of-the-pm-kisan-scheme-from-2026-27-to-2030-31-with-a-financial-outlay-of-rs-3-15-lakh-crore/",
+          "fetched_url": "https://www.pmindia.gov.in/en/news_updates/cabinet-approves-continuation-of-the-pm-kisan-scheme-from-2026-27-to-2030-31-with-a-financial-outlay-of-rs-3-15-lakh-crore/",
+          "content_hash": "52a7f9b7dff97c5e47a9fa26e99a0af3bcd3243173f98361cf42a825260e1f62",
+          "title": "Cabinet approves continuation of the PM-KISAN Scheme from 2026-27 to 2030-31 with a Financial Outlay of Rs.3.15 lakh crore ",
+          "role": "official_page",
+          "fetched_at": "2026-10-11T13:00:19.637951+00:00",
+          "extraction_method": "tinyfish_render",
+          "visible_chars": 4321,
+          "evidence_excerpt": "The Union Cabinet chaired by the Prime Minister Shri Narendra Modi has approved continuation of the Pradhan Mantri Kisan Samman Nidhi (PM-KISAN) Scheme from 2026–27 to 2030–31.\nA total financial outlay of Rs.3.15 lakh crore has been approved for the Scheme during this period.\nThrough the PM-KISAN Scheme, timely and transparent income support is being provided to eligible farmer families through the Direct Benefit Transfer (DBT) system, enabling farmers to increase agricultural investment and strengthen their livelihoods.\nUnder the Scheme, eligible landholding farmer families receive financial assistance of Rs.6,000 per year, transferred directly into their bank accounts in three equal instalments.\nAn Important Step Towards an Atmanirbhar Bharat and Prosperous Farmers:"
+        }
+      ],
+      "evidence_packet": "SOURCE URL: https://pmkisan.gov.in/Documents/RevisedFAQ.pdf\nRs.10,000/-or more(Excluding Ir/ulti Tasking\nliability towards transfer of benefit to targeted beneficiaries will be borne by\nb) The eligible farmers may apply with the village Patwaris, revenue officials or other\nAadhaar number shall be collected for those beneficiaries where it is available\nemployees of the Local Bodies are not eligible to get benefit under the scheme\nare eligible to get benefit under the Scheme, provided their families are otherwise\n01 .02.2019 and no changes thereafter shall be considered for eligibility of benefit\nls an income tax payee farmer or his / her spouse eligible to get benefit\nlandholding whether each farmer's family is eligible to get benefit of the\nb) The eligible farmers may apply with the village Patwaris, revenue officials or other\n\nSOURCE URL: https://www.pib.gov.in/PressReleasePage.aspx?PRID=2146932\nUnder the scheme, a financial benefit of Rs 6,000/- per year is transferred in three equal instalments, into the Aadhaar seeded bank accounts of farmers through Direct Benefit Transfer (DBT) mode.\n# Eligibility Criteria of PM-KISAN\nApart from the PM-KISAN grievance module, farmers can also register their grievances through Centralized Public Grievance Redress and Monitoring System (CPGRAMS) Portal.\nFarmers Welfare\n# Eligibility Criteria of PM-KISAN\nUnder the scheme, a financial benefit of Rs 6,000/- per year is transferred in three equal instalments, into the Aadhaar seeded bank accounts of farmers through Direct Benefit Transfer (DBT) mode.\n23,000 Crore.\nThere is a dedicated grievance module on the PM-KISAN Portal for raising grievances by the farmers.\n\nSOURCE URL: https://www.pib.gov.in/Pressreleaseshare.aspx?PRID=1562184\nThis programme will entail an annual expenditure of Rs.75,000 crore”.\nThis income support will be transferred directly into the bank accounts of beneficiary farmers, in three equal instalments of Rs.\nWhile presenting the Interim Budget 2019-20 in Parliament today the Union Minister for Finance, Corporate Affairs, Railways & Coal, Shri Piyush Goyal said, “Under this programme, vulnerable landholding farmer families, having cultivable land upto 2 hectares, will be provided direct income support at the rate of Rs.\n6,000 per year.\nThis programme will entail an annual expenditure of Rs.75,000 crore”.\nNow, I propose to provide the benefit of 2% interest subvention to the farmers pursuing the activities of animal husbandry and fisheries, who avail loan through Kisan Credit Card\n\nSOURCE URL: https://www.pmindia.gov.in/en/news_updates/cabinet-approves-continuation-of-the-pm-kisan-scheme-from-2026-27-to-2030-31-with-a-financial-outlay-of-rs-3-15-lakh-crore/\nThe Union Cabinet chaired by the Prime Minister Shri Narendra Modi has approved continuation of the Pradhan Mantri Kisan Samman Nidhi (PM-KISAN) Scheme from 2026–27 to 2030–31.\nA total financial outlay of Rs.3.15 lakh crore has been approved for the Scheme during this period.\nThrough the PM-KISAN Scheme, timely and transparent income support is being provided to eligible farmer families through the Direct Benefit Transfer (DBT) system, enabling farmers to increase agricultural investment and strengthen their livelihoods.\nUnder the Scheme, eligible landholding farmer families receive financial assistance of Rs.6,000 per year, transferred directly into their bank accounts in three equal instalments.\nAn Important Step Towards an Atmanirbhar Bharat and Prosperous Farmers:"
+    }
+  ]
+}

@@ -58,6 +58,7 @@ AUX_COLLECTIONS: dict[str, tuple[tuple[str | tuple[str, ...], dict[str, Any]], .
     "scheme_revisions": (
         ("revision_id", {"unique": True}),
         ("scheme_id", {}),
+        ("seed_query", {}),
         (("scheme_id", "revision"), {"unique": True}),
     ),
     "verification_logs": (

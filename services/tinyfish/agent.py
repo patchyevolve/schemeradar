@@ -30,6 +30,7 @@ import hashlib
 import hmac
 import logging
 import re
+import socket
 import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -884,6 +885,12 @@ class TinyFishWebAgentClient:
                     error_class, status = "ssrf_blocked", VerificationStatus.UNREACHABLE
                     logger.warning("Tier3 %s: %s", job_id, exc)
                     raise _Abort from exc
+                except OSError as exc:
+                    # A resolver outage is not evidence of a private target,
+                    # but it must fail closed and must not escape the SSE run.
+                    error_class, status = "dns_failure", VerificationStatus.UNREACHABLE
+                    logger.warning("Tier3 %s DNS preflight failed: %s", job_id, type(exc).__name__)
+                    raise _Abort from exc
 
                 # -- step 2: browser context -----------------------------
                 yield "opening_browser"
@@ -908,7 +915,9 @@ class TinyFishWebAgentClient:
                         )
                     except Exception as exc:  # noqa: BLE001 — Playwright typed
                         name = type(exc).__name__.lower()
-                        err = "timeout" if "timeout" in name else "dns_failure"
+                        err = ("timeout" if "timeout" in name else
+                               "dns_failure" if isinstance(exc, (OSError, socket.gaierror)) else
+                               "browser_error")
                         if err != "timeout" or elapsed_ms() >= RETRY_ELIGIBLE_MS:
                             error_class, status = err, VerificationStatus.UNREACHABLE
                             raise _Abort from exc

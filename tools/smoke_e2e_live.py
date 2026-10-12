@@ -39,7 +39,9 @@ _ROOT = pathlib.Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-SEARCH_QUERY = "pm kisan scheme"          # an input, not a result — the URL below is discovered
+SEARCH_QUERY = (
+    "pm kisan official scheme eligibility benefits application guidelines FAQ"
+)  # query intent; every URL is discovered from live results
 # Tier 1 returns a *portal homepage* as readily as a scheme page, and a
 # homepage often renders to a bare statistics table with nothing to extract.
 # These gates keep the choice driven purely by live results while still
@@ -49,9 +51,8 @@ SCHEME_SIGNALS = (
     "age ", "income", "scheme", "installment", "subsid",
 )
 SCHEME_MIN_CHARS = 1000        # below this there is not enough to extract
-SCHEME_MAX_CHARS = 8000        # above this the prompt outgrows the LLM budget
 SCHEME_MIN_SIGNALS = 3
-IDEAL_CHARS = 5000           # centre of the parseable band; best-of target
+IDEAL_CHARS = 3500           # extraction cap; choose a page with enough source facts
 EARLY_EXIT_SIGNALS = 5       # rich enough that a later hit will not beat it
 MAX_RENDER_CANDIDATES = 4    # bound Tier 2 wall time while still shopping
 
@@ -211,57 +212,35 @@ async def main() -> int:
     for n, h in enumerate(hits, 1):
         title = str(h.get("title") or "")
         line(f"hit {n}:", f"{h.url}  {DIM}({title[:60]}){RESET}")
-    portal_url = ""            # resolved in step 3, once a page is proven parseable
+    source_url = ""            # selected official evidence page
     ok(f"Tier 1 answered in {t1_ms} ms (budget {s.tinyfish_timeout_tier1_ms} ms)")
 
     # ---------------------------------------------------------------- 3 --
-    step(3, "Tier 2 fetch — live render of a parseable discovered portal")
+    step(3, "Tier 2 fetch — render official sources and build an evidence bundle")
     t = time.perf_counter()
     async with TinyFishFetchClient() as fetcher:
-        fetched = None
-        portal_url = ""
-        attempts: list[str] = []
-        best: tuple[int, int, object, str] | None = None   # (score, chars, cand, url)
-        for n, h in enumerate(hits):
-            url = str(h.url)
-            if url.lower().split("?")[0].endswith(".pdf"):
-                attempts.append(f"{url} -> skipped (PDF, not a portal page)")
-                continue
-            if n >= MAX_RENDER_CANDIDATES:
-                attempts.append(f"{url} -> skipped (render cap {MAX_RENDER_CANDIDATES})")
-                continue
-            try:
-                cand = await fetcher.render(url)
-            except Exception as exc:                      # noqa: BLE001 - report and move on
-                attempts.append(f"{url} -> {type(exc).__name__}")
-                continue
-            md = cand.markdown
-            score = scheme_content_score(md)
-            attempts.append(f"{url} -> {len(md)} chars, {score} scheme signals")
-            # Keep the richest page seen so far; prefer signal count, then a
-            # length closest to the middle of the parseable band (a 1.5k-char
-            # press release can clear MIN_SIGNALS yet carry no scheme body).
-            if SCHEME_MIN_SIGNALS <= score and SCHEME_MIN_CHARS <= len(md) <= SCHEME_MAX_CHARS:
-                cand_key = (score, -abs(len(md) - IDEAL_CHARS))
-                if best is None or cand_key > (best[0], -abs(best[1] - IDEAL_CHARS)):
-                    best = (score, len(md), cand, url)
-                # A page this rich will not be beaten by a later hit.
-                if score >= EARLY_EXIT_SIGNALS and len(md) >= IDEAL_CHARS:
-                    break
-        if best is not None:
-            _, _, fetched, portal_url = best
+        from tools.batch_ingest import fetch_best_page
+        selected = await fetch_best_page(hits, fetcher)
+        if selected is None:
+            fetched, extraction_markdown = None, ""
+        else:
+            fetched, extraction_markdown = selected
     t2_ms = int((time.perf_counter() - t) * 1000)
-    for a in attempts:
-        line("  candidate:", f"{DIM}{a}{RESET}")
     if fetched is None:
         fail("no discovered hit rendered into a parseable scheme page")
         return 4
-    line("selected portal:", f"{BOLD}\033[96m{portal_url}{RESET}")
+    source_url = str(fetched.get("source_url") or fetched["final_url"])
+    fallback_verify_url = next(
+        (str(h.url) for h in hits
+         if not str(h.url).lower().split("?")[0].endswith(".pdf")),
+        source_url,
+    )
+    line("selected evidence source:", f"{BOLD}\033[96m{source_url}{RESET}")
     markdown = fetched.markdown
     line("http_status:", str(fetched["http_status"]))
     line("final_url:", fetched["final_url"])
     line("rendered_at:", str(fetched["rendered_at"]))
-    line("markdown:", f"{BOLD}{len(markdown)}{RESET} chars  "
+    line("markdown:", f"{BOLD}{len(markdown)}{RESET} chars fetched  "
                      f"(~{len(markdown) // 4} tokens)")
     line("content_hash:", fetched.content_hash)
     if not markdown.strip():
@@ -273,9 +252,13 @@ async def main() -> int:
     # ---------------------------------------------------------------- 4 --
     step(4, "Ingestion LLM + L1-L5 ladder — live completion -> Scheme")
     t = time.perf_counter()
+    line("source sent to extractor:", f"{len(extraction_markdown)} chars"
+         + (f" (evidence bundle from {len(fetched.get('evidence_sources', []))} sources)"))
     outcome = await ingest_markdown(
-        markdown,
-        fetch={"final_url": fetched["final_url"], "content_hash": fetched.content_hash},
+        extraction_markdown,
+        fetch={"source_url": source_url, "final_url": fetched["final_url"],
+               "content_hash": fetched.content_hash,
+               "source_documents": fetched.get("evidence_sources", [])},
         db=None,          # read-only smoke: no Mongo write, no HRQ row
         indexer=None,     # no embed, no Qdrant upsert
         check_dns=False,  # SSRF halves are unit-tested; keep this run about the ladder
@@ -296,7 +279,7 @@ async def main() -> int:
         fail("ladder rejected the candidate -> human_review (fail-closed)")
         for v in outcome.violations:
             print(f"      \033[91m- {v}{RESET}")
-        bits = urlparse(portal_url)
+        bits = urlparse(fallback_verify_url)
         scheme_id = "sch_" + re.sub(
             r"[^a-z0-9]+", "_", f"{bits.netloc}{bits.path}".lower()
         ).strip("_")
@@ -335,9 +318,14 @@ async def main() -> int:
 
     # ---------------------------------------------------------------- 5 --
     step(5, "Tier 3 web agent — live portal run, SSE-shaped trace")
+    verify_url = (
+        str(outcome.scheme.portal_url)
+        if outcome.scheme is not None
+        else fallback_verify_url
+    )
     job_id = uuid.uuid4().hex
     if not scheme_id:
-        bits = urlparse(portal_url)
+        bits = urlparse(verify_url)
         scheme_id = "sch_" + re.sub(
             r"[^a-z0-9]+", "_", f"{bits.netloc}{bits.path}".lower()
         ).strip("_")
@@ -350,7 +338,7 @@ async def main() -> int:
     frames: list[tuple[int, object]] = []
     result: VerificationResult | None = None
     n = 0
-    async for item in agent.events(scheme_id, portal_url, job_id):
+    async for item in agent.events(scheme_id, verify_url, job_id):
         ms = int((time.perf_counter() - t) * 1000)
         frames.append((ms, item))
         if isinstance(item, VerificationResult):
@@ -441,7 +429,7 @@ async def main() -> int:
 
     # ---------------------------------------------------------------- --
     print(f"\n\033[95m{BOLD}SUMMARY{RESET}")
-    line("Tier 1", f"live search {t1_ms} ms -> {portal_url}")
+    line("Tier 1", f"live search {t1_ms} ms -> {source_url}")
     line("Tier 2", f"live fetch {t2_ms} ms, {len(markdown)} chars markdown")
     line("Ingestion LLM", f"{outcome.result} @ {outcome.layer}, {parse_ms} ms")
     line("Tier 3", f"{verdict} in {dur} ms ({pct:.1f}% of {budget} ms)")

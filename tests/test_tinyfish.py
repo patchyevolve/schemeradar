@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import json
 import pathlib
+import socket
 from datetime import date, datetime, timezone
 from typing import Any, Callable
 
@@ -55,6 +56,18 @@ class _VerificationLogs:
         self.owner.verification_rows.append(dict(doc))
 
 
+class _SchemeRevisions:
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+
+    def find_one(self, flt: dict, *args: Any, **kw: Any) -> dict | None:
+        matches = [r for r in self.rows if r.get("scheme_id") == flt.get("scheme_id")]
+        return max(matches, key=lambda r: r["revision"]) if matches else None
+
+    def insert_one(self, doc: dict) -> None:
+        self.rows.append(dict(doc))
+
+
 class FakeDB:
     """Stands in for the PyMongo ``Database``: records every write in order."""
 
@@ -64,6 +77,7 @@ class FakeDB:
         self.finds: list[dict] = []
         self.updates: list[dict] = []          # ``update_one`` filter + $set
         self.verification_rows: list[dict] = []  # DATA_SPEC §8.1
+        self.revision_collection = _SchemeRevisions()
 
     @property
     def schemes(self) -> "FakeDB":
@@ -76,6 +90,10 @@ class FakeDB:
     @property
     def verification_logs(self) -> _VerificationLogs:
         return _VerificationLogs(self)
+
+    @property
+    def scheme_revisions(self) -> _SchemeRevisions:
+        return self.revision_collection
 
     def find_one(self, flt: dict, *args: Any, **kw: Any) -> dict | None:
         self.finds.append(dict(flt))
@@ -282,6 +300,34 @@ def test_fetch_reports_the_status_when_the_portal_errors():
     assert res.markdown == ""
 
 
+def test_fetch_requests_and_returns_official_page_links():
+    from services.tinyfish.client import TinyFishFetchClient
+
+    links = ["https://pmkisan.gov.in/Documents/RevisedGuidelines.pdf"]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        assert body["links"] is True and body["iframe_links"] is True
+        assert body["purpose"].startswith("official scheme")
+        return httpx.Response(200, json={"results": [{
+            "url": GOV_URL, "final_url": GOV_URL, "text": "scheme details",
+            "links": links, "iframe_links": ["https://pmkisan.gov.in/guidelines"],
+        }]})
+
+    async def main():
+        async with TinyFishFetchClient(
+            api_key="k", base_url="https://f.test", http=_mock_client(handler)
+        ) as client:
+            return await client.render(
+                GOV_URL, include_links=True, include_iframe_links=True,
+                purpose="official scheme source discovery",
+            )
+
+    result = run(main())
+    assert result["links"] == links
+    assert result["iframe_links"] == ["https://pmkisan.gov.in/guidelines"]
+
+
 def test_fetch_rejects_non_gov_url_before_any_network_call():
     from services.tinyfish.client import SsrfBlocked, TinyFishFetchClient
 
@@ -412,12 +458,13 @@ def test_l3_cross_field_invariant_vcf1():
 
 def test_l3_cross_field_invariant_vcf4_is_l3_only():
     """V-CF4 has no Pydantic twin, so it must land on L3 unaided."""
+    from services.tinyfish.parser import cross_field_violations
+
     raw = dict(seed())
     raw["intake_window"] = dict(raw["intake_window"])
     raw["intake_window"]["cycle_status"] = "closed"  # INTAKE_OPEN + closed
-    res = _ladder(raw)
-    assert res.layer == "L3"
-    assert any("V-CF4" in t for t in res.tags)
+    violations = cross_field_violations(raw)
+    assert any(v.code == "V-CF4" for v in violations)
 
 
 def test_l3_missing_provenance_is_a_failure():
@@ -426,6 +473,50 @@ def test_l3_missing_provenance_is_a_failure():
     res = run_ladder(seed(), provenance={}, parse_confidence=0.9, check_dns=False)
     assert res.layer == "L3"
     assert any(t.startswith("L3:provenance_span_absent:") for t in res.tags)
+
+
+def test_l3_does_not_require_quotes_for_gateway_derived_ids():
+    from services.tinyfish.parser import provenance_violations
+
+    violations = provenance_violations(
+        ["schema_version", "scheme_id", "slug"],
+        {},
+        source_text="",
+        candidate={
+            "schema_version": "1.0.0",
+            "scheme_id": "sch_example",
+            "slug": "example",
+        },
+    )
+    assert violations == []
+
+
+def test_parse_envelope_recovers_metadata_nested_inside_scheme():
+    from services.tinyfish.parser import _parse_envelope
+
+    output = _parse_envelope(json.dumps({
+        "scheme": {
+            "name": "Example Scheme",
+            "provenance": {"name": "Example Scheme"},
+            "parse_confidence": 0.9,
+        },
+    }))
+    assert output.candidate == {"name": "Example Scheme"}
+    assert output.provenance == {"name": "Example Scheme"}
+    assert output.parse_confidence == 0.9
+
+
+def test_parse_envelope_recovers_metadata_from_flat_scheme():
+    from services.tinyfish.parser import _parse_envelope
+
+    output = _parse_envelope(json.dumps({
+        "name": "Example Scheme",
+        "provenance": {"name": "Example Scheme"},
+        "parse_confidence": 0.9,
+    }))
+    assert output.candidate == {"name": "Example Scheme"}
+    assert output.provenance == {"name": "Example Scheme"}
+    assert output.parse_confidence == 0.9
 
 
 def test_l4_dns_half_blocks_and_is_marked_security():
@@ -465,12 +556,28 @@ def _llm_factory(candidates: list[tuple[dict, float]]) -> Callable[..., Any]:
         violations: Any = (),
         **kw: Any,
     ) -> Any:
-        from services.tinyfish.parser import LLMOutput, provenance_from_span
+        from services.tinyfish.parser import (
+            LLMOutput, NOT_STATED_SPAN, _claimed_leaf_paths, extractable_required,
+        )
 
         idx = min(len(calls), len(candidates) - 1)
         cand, conf = candidates[idx]
         calls.append({"previous": previous, "violations": list(violations)})
-        return LLMOutput(cand, provenance_from_span("span"), conf)
+        source = markdown
+        provenance = {}
+        for key in extractable_required():
+            if cand.get(key) is None or cand.get(key) == "":
+                provenance[key] = NOT_STATED_SPAN
+                continue
+            marker = f'"{key}":'
+            pos = source.find(marker)
+            provenance[key] = source[pos:pos + 190] if pos >= 0 else "not in source"
+        for path, value in _claimed_leaf_paths(cand):
+            literal = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+            pos = source.find(literal)
+            if pos >= 0:
+                provenance[path] = source[pos:pos + 190]
+        return LLMOutput(cand, provenance, conf)
 
     fake_llm.calls = calls  # type: ignore[attr-defined]
     return fake_llm
@@ -482,7 +589,7 @@ def _fetch() -> dict:
         "final_url": GOV_URL,
         "http_status": 200,
         "content_hash": "a" * 64,
-        "markdown": "# Pm Kisan " + "eligibility " * 30,
+        "markdown": json.dumps(seed(), ensure_ascii=False, separators=(",", ":")),
     }
 
 
@@ -504,13 +611,355 @@ def test_accept_path_commits_mongo_then_calls_indexer(db: FakeDB):
     db.replace_one = tracking_replace  # type: ignore[method-assign]
 
     async def main():
-        return await ingest_markdown(_fetch()["markdown"], fetch=_fetch(), db=db,
-                                     indexer=indexer, llm=llm)
+        fetch = _fetch()
+        fetch["seed_query"] = "PM Kisan eligibility benefits documents vikaspedia"
+        fetch["source_documents"] = [{
+            "url": GOV_URL, "content_hash": fetch["content_hash"],
+            "evidence_excerpt": fetch["markdown"],
+        }]
+        return await ingest_markdown(fetch["markdown"], fetch=fetch, db=db,
+                                     indexer=indexer, llm=llm, check_dns=False)
 
     out = run(main())
     assert out.result == "ok" and out.index_state == "indexed"
     assert order == ["mongo", "indexer"]  # Phase 1 §3.1 write ordering
+    assert db.scheme_revisions.rows[0]["parse_provenance"]
+    assert db.scheme_revisions.rows[0]["revision"] == 1
+    assert db.scheme_revisions.rows[0]["scheme_id"] == SCH_ID
+    assert db.scheme_revisions.rows[0]["seed_query"] == "PM Kisan eligibility benefits documents vikaspedia"
+    assert db.scheme_revisions.rows[0]["evidence_sources"][0]["url"] == GOV_URL
+    assert any(db.scheme_revisions.rows[0]["field_source_map"].values())
     assert db.logs and db.logs[0]["stage"] == "parse"
+
+
+def test_ingest_routes_fabricated_provenance_to_hrq(db: FakeDB):
+    from services.tinyfish.parser import LLMOutput, ingest_markdown, provenance_from_span
+
+    source = json.dumps(seed(), ensure_ascii=False, separators=(",", ":"))
+
+    async def fake_llm(markdown: str, **kwargs: Any) -> LLMOutput:
+        return LLMOutput(seed(), provenance_from_span("fabricated evidence"), 0.95)
+
+    indexed: list[Any] = []
+    out = run(ingest_markdown(source, fetch=_fetch(), db=db,
+                              indexer=indexed.append, llm=fake_llm, check_dns=False))
+    assert out.result == "human_review" and out.layer == "L3"
+    assert any("provenance_span_not_in_source" in v for v in out.violations)
+    assert indexed == []
+
+
+def test_composite_required_field_can_be_proven_by_its_exact_leaf_citations():
+    from services.tinyfish.parser import provenance_violations
+
+    candidate = {"benefits": [{"amount_inr": 6000, "frequency": "annual"}]}
+    source = "Eligible families receive Rs. 6,000 per year."
+    provenance = {
+        "benefits[0].amount_inr": "Rs. 6,000 per year",
+        "benefits[0].frequency": "Rs. 6,000 per year",
+    }
+    assert provenance_violations(
+        ["benefits"], provenance, source_text=source, candidate=candidate
+    ) == []
+
+
+def test_ingestion_defaults_live_status_to_unverified_and_keeps_source_url_separate():
+    from services.tinyfish.parser import apply_server_defaults, normalize_candidate
+
+    raw = seed()
+    raw["verification_status"] = "INTAKE_OPEN"
+    raw["verified_at"] = None
+    no_portal = dict(raw)
+    no_portal.pop("portal_url")
+    normalized = normalize_candidate(no_portal, source_url=GOV_URL)
+    assert "portal_url" not in normalized
+
+    document = apply_server_defaults(
+        raw, fetch={"final_url": GOV_URL, "content_hash": "a" * 64},
+        parse_confidence=0.95,
+    )
+    assert document["verification_status"] == "UNVERIFIED"
+    assert document["verified_at"] is None
+
+
+def test_normalize_candidate_does_not_fill_missing_scheme_facts_with_placeholders():
+    from services.tinyfish.parser import normalize_candidate
+
+    raw = seed()
+    raw.pop("department")
+    raw.pop("sponsoring_body")
+    raw["benefits"][0].pop("eligibility_note")
+    if raw["required_documents"]:
+        raw["required_documents"][0].pop("name")
+        raw["required_documents"][0].pop("issuance_authority")
+    normalized = normalize_candidate(raw)
+    assert "department" not in normalized
+    assert "sponsoring_body" not in normalized
+    assert "eligibility_note" not in normalized["benefits"][0]
+    if normalized["required_documents"]:
+        assert "name" not in normalized["required_documents"][0]
+        assert "issuance_authority" not in normalized["required_documents"][0]
+
+
+def test_l3_rejects_extracted_scheme_name_that_does_not_match_candidate():
+    from services.tinyfish.parser import provenance_from_span, run_ladder
+
+    result = run_ladder(
+        seed(), provenance=provenance_from_span("source span"), parse_confidence=0.95,
+        fetch={"candidate_name": "Pradhan Mantri Fasal Bima Yojana",
+               "source_url": GOV_URL, "content_hash": "a" * 64}, check_dns=False,
+    )
+    assert not result.ok and result.layer == "L3"
+    assert "L3:candidate_identity_mismatch:name" in result.tags
+
+
+def test_evidence_coverage_reports_missing_fields_without_claiming_truth():
+    from tools.batch_ingest import assess_evidence_coverage
+
+    coverage = assess_evidence_coverage(
+        "PM-KISAN scheme eligibility criteria are for farmers and the subsidy amount is ₹500.",
+        "Pradhan Mantri Kisan Samman Nidhi",
+    )
+    assert coverage["scheme_identity"]["status"] == "signal_found"
+    assert coverage["eligibility"]["status"] == "signal_found"
+    assert coverage["benefits"]["status"] == "signal_found"
+    assert coverage["document_checklist"]["status"] == "not_found_in_packet"
+    assert coverage["application_route"]["status"] == "not_found_in_packet"
+    assert coverage["continuation"]["status"] == "not_found_in_packet"
+
+
+def test_evidence_coverage_does_not_confuse_aadhaar_mention_with_document_checklist():
+    from tools.batch_ingest import assess_evidence_coverage
+
+    text = (
+        "PM-KISAN is a scheme for eligible farmers. Income support is Rs.60001 per year. "
+        "Aadhaar number shall be collected where available. Farmers may apply with village Patwaris."
+    )
+    coverage = assess_evidence_coverage(text, "Pradhan Mantri Kisan Samman Nidhi")
+    assert coverage["document_checklist"]["status"] == "partial_rule_only"
+    assert coverage["application_route"]["status"] == "signal_found"
+    assert coverage["benefits"]["status"] == "needs_numeric_review"
+    assert coverage["continuation"]["status"] == "not_found_in_packet"
+
+
+def test_coverage_gap_queries_are_specific_and_skip_supported_fields():
+    from tools.batch_ingest import coverage_search_queries
+
+    coverage = {
+        "scheme_identity": {"status": "signal_found"},
+        "eligibility": {"status": "signal_found"},
+        "benefits": {"status": "needs_numeric_review"},
+        "document_checklist": {"status": "partial_rule_only"},
+        "application_route": {"status": "signal_found"},
+        "continuation": {"status": "not_found_in_packet"},
+    }
+    queries = coverage_search_queries(
+        coverage, "Pradhan Mantri Kisan Samman Nidhi", "PM Kisan eligibility"
+    )
+    assert [field for field, _ in queries] == [
+        "benefits", "document_checklist", "continuation"
+    ]
+    assert "exact benefit amount" in queries[0][1]
+    assert "complete documents required checklist" in queries[1][1]
+    assert all("Pradhan Mantri Kisan Samman Nidhi" in query for _, query in queries)
+
+
+def test_full_field_search_builds_one_query_for_each_scheme_field():
+    from tools.batch_ingest import coverage_search_queries
+
+    coverage = {key: {"status": "signal_found"} for key in (
+        "scheme_identity", "eligibility", "benefits", "document_checklist",
+        "application_route", "continuation",
+    )}
+    queries = coverage_search_queries(
+        coverage, "Example Scheme", "example", search_all_fields=True
+    )
+    assert [field for field, _ in queries] == [
+        "scheme_identity", "eligibility", "benefits", "document_checklist",
+        "application_route", "continuation",
+    ]
+
+
+def test_field_evidence_keeps_verbatim_quotes_and_source_provenance():
+    from services.tinyfish.field_evidence import build_field_evidence
+
+    output = build_field_evidence([{
+        "url": "https://example.gov.in/rules.pdf",
+        "content_hash": "abc123",
+        "published_date": "2026-06-01",
+        "fetched_at": "2026-10-12T00:00:00Z",
+        "evidence_excerpt": (
+            "Example Scheme provides financial assistance of Rs. 5,000 per year.\n"
+            "Aadhaar number shall be collected where available.\n"
+            "Eligible households may apply through the official portal."
+        ),
+    }], "Example Scheme")
+    benefit = output["benefits"]["claims"][0]
+    assert "Rs. 5,000 per year" in benefit["quote"]
+    assert benefit["source_url"] == "https://example.gov.in/rules.pdf"
+    assert benefit["content_hash"] == "abc123"
+    assert benefit["published_date"] == "2026-06-01"
+    assert output["document_checklist"]["status"] == "partial_rule_only"
+
+
+def test_partial_document_rule_is_useful_but_not_called_a_complete_checklist():
+    from tools.batch_ingest import _coverage_status_is_useful
+
+    assert _coverage_status_is_useful("document_checklist", "partial_rule_only")
+    assert not _coverage_status_is_useful("document_checklist", "not_found_in_packet")
+    assert not _coverage_status_is_useful("benefits", "needs_numeric_review")
+
+
+def test_numeric_footnote_artifact_needs_two_independent_clean_official_sources():
+    from tools.batch_ingest import (
+        assess_evidence_coverage,
+        resolve_cross_source_numeric_artifact,
+    )
+
+    coverage = assess_evidence_coverage("PM-KISAN income support is Rs.60001 per year.", "PM-KISAN")
+    sources = [
+        {"url": "https://pmkisan.gov.in/faq.pdf", "text": "PM-KISAN income support is Rs.60001 per year."},
+        {"url": "https://pib.gov.in/a", "text": "PM-KISAN: Rs. 6,000 per year."},
+        {"url": "https://pmindia.gov.in/b", "text": "PM-KISAN gives ₹6,000 annually."},
+    ]
+    resolved = resolve_cross_source_numeric_artifact(coverage, sources)
+    assert resolved["benefits"]["status"] == "signal_found"
+    assert "Rs.60001" in resolved["benefits"]["warnings"][0]
+
+    unresolved = resolve_cross_source_numeric_artifact(coverage, sources[:2])
+    assert unresolved["benefits"]["status"] == "needs_numeric_review"
+
+
+def test_coverage_excerpt_prioritizes_missing_field_passage():
+    from tools.batch_ingest import prepare_coverage_excerpt
+
+    text = (
+        "A long generic introduction about scheme context.\n"
+        "The Union Cabinet approved continuation of the PM-KISAN Scheme from 2026-27 to 2030-31.\n"
+        "More generic background that should not crowd out the targeted evidence."
+    )
+    excerpt = prepare_coverage_excerpt(text, 180, ["continuation"])
+    assert "continuation" in excerpt.lower()
+    assert "2030-31" in excerpt
+
+
+def test_coverage_excerpt_can_omit_reconciled_malformed_currency_line():
+    from tools.batch_ingest import prepare_coverage_excerpt
+
+    text = (
+        "PM-KISAN FAQ: financial assistance is Rs.60001 per year.\n"
+        "PM-KISAN supports eligible landholding farmer families."
+    )
+    excerpt = prepare_coverage_excerpt(
+        text, 240, ["eligibility", "benefits"], omit_suspicious_currency=True
+    )
+    assert "60001" not in excerpt
+    assert "eligible landholding farmer families" in excerpt
+
+
+def test_cross_source_conflict_review_distinguishes_conflict_from_different_units():
+    from services.tinyfish.conflicts import review_source_conflicts
+
+    conflicting = review_source_conflicts([
+        {"url": "https://a.gov.in/a", "text": "Annual income support is Rs. 6,000 per year."},
+        {"url": "https://b.gov.in/b", "text": "Annual income support is Rs. 8,000 per year."},
+    ])
+    assert conflicting["benefits"]["status"] == "conflicting"
+    assert conflicting["benefits"]["conflicts"][0]["amounts"] == ["6000", "8000"]
+
+    different_units = review_source_conflicts([
+        {"url": "https://a.gov.in/a", "text": "Scholarship assistance is Rs. 6,000 per year."},
+        {"url": "https://b.gov.in/b", "text": "Scholarship assistance is Rs. 500 per month."},
+    ])
+    assert different_units["benefits"]["status"] != "conflicting"
+
+
+def test_cross_source_conflict_review_catches_disagreeing_explicit_document_lists():
+    from services.tinyfish.conflicts import review_source_conflicts
+
+    result = review_source_conflicts([
+        {"url": "https://a.gov.in/a", "text": "Following documents required: Aadhaar, bank passbook."},
+        {"url": "https://b.gov.in/b", "text": "Following documents required: Aadhaar, land record."},
+    ])
+    assert result["documents"]["status"] == "conflicting"
+
+
+def test_cross_source_conflict_review_does_not_mix_subsidy_tiers_percent_or_savings():
+    from services.tinyfish.conflicts import review_source_conflicts
+
+    result = review_source_conflicts([
+        {"url": "https://a.gov.in/a", "text": (
+            "Households may receive a subsidy of Rs. 14,588 and later a subsidy of Rs. 30,000."
+        )},
+        {"url": "https://b.gov.in/b", "text": (
+            "The scheme offers a subsidy of up to 40 percent to households."
+        )},
+        {"url": "https://c.gov.in/c", "text": (
+            "The program saves the government Rs. 75,000 crores annually in electricity costs."
+        )},
+    ])
+    assert result["benefits"]["status"] != "conflicting"
+    assert all("75000" not in claim["amount"] for claim in result["benefits"]["claims"])
+
+
+def test_continuation_coverage_ignores_other_schemes_extension():
+    from tools.batch_ingest import assess_evidence_coverage
+
+    coverage = assess_evidence_coverage(
+        "The extension of Kisan Credit Card scheme applies to fisheries.\n"
+        "The Cabinet approved continuation of the PM-KISAN Scheme from 2026-27 to 2030-31.",
+        "Pradhan Mantri Kisan Samman Nidhi",
+    )
+    assert coverage["continuation"]["status"] == "signal_found"
+    assert "PM-KISAN" in coverage["continuation"]["matched_passages"][0]
+
+    unrelated = assess_evidence_coverage(
+        "The extension of Kisan Credit Card scheme applies to fisheries.",
+        "Pradhan Mantri Kisan Samman Nidhi",
+    )
+    assert unrelated["continuation"]["status"] == "not_found_in_packet"
+
+
+def test_document_coverage_requires_explicit_checklist_before_indexing():
+    from services.tinyfish.parser import source_coverage_review_violation
+
+    violation = source_coverage_review_violation({
+        "evidence_coverage": {
+            "document_checklist": {"status": "partial_rule_only"}
+        }
+    })
+    assert violation is not None
+    assert violation.code == "source_coverage_incomplete"
+    assert violation.field_name == "required_documents"
+    assert source_coverage_review_violation({
+        "evidence_coverage": {
+            "document_checklist": {"status": "signal_found"}
+        }
+    }) is not None
+    assert source_coverage_review_violation({
+        "evidence_coverage": {
+            "document_checklist": {"status": "partial_rule_only"}
+        },
+        "field_evidence": {
+            "document_checklist": {"status": "checklist_passage_found"}
+        },
+    }) is None
+
+
+def test_seed_loader_uses_catalog_identity_and_status_for_candidates():
+    from tools.batch_ingest import DEFAULT_SEEDS_PATH, load_seeds
+
+    seeds = load_seeds(DEFAULT_SEEDS_PATH)
+    assert seeds[0].canonical_name == "Pradhan Mantri Kisan Samman Nidhi"
+    assert seeds[0].catalog_status == "source_ready"
+    held = next(item for item in seeds if item.canonical_name == "Pradhan Mantri Krishi Sinchayee Yojana")
+    assert held.catalog_status == "needs_component_source_review"
+
+
+def test_candidate_identity_screen_uses_name_tokens():
+    from tools.batch_ingest import candidate_identity_matches
+
+    assert candidate_identity_matches("Pradhan Mantri Kisan Samman Nidhi", "PM-KISAN benefits")
+    assert not candidate_identity_matches("Pradhan Mantri Fasal Bima Yojana", "PM-Kisan benefits")
 
 
 def test_repair_runs_exactly_once_then_accepts(db: FakeDB):
@@ -522,7 +971,7 @@ def test_repair_runs_exactly_once_then_accepts(db: FakeDB):
 
     async def main():
         return await ingest_markdown(_fetch()["markdown"], fetch=_fetch(), db=db,
-                                     indexer=lambda m: None, llm=llm)
+                                     indexer=lambda m: None, llm=llm, check_dns=False)
 
     out = run(main())
     assert out.repaired and out.result == "repaired"
@@ -539,7 +988,7 @@ def test_hrq_low_confidence_never_repairs_and_never_indexes(db: FakeDB):
 
     async def main():
         return await ingest_markdown(_fetch()["markdown"], fetch=_fetch(), db=db,
-                                     indexer=indexed.append, llm=llm)
+                                     indexer=indexed.append, llm=llm, check_dns=False)
 
     out = run(main())
     assert out.result == "human_review" and out.layer == "L5"
@@ -588,7 +1037,7 @@ def test_hrq_l1_falls_through_to_the_single_repair(db: FakeDB):
 
     async def main():
         return await ingest_markdown(_fetch()["markdown"], fetch=_fetch(), db=db,
-                                     indexer=indexed.append, llm=llm)
+                                     indexer=indexed.append, llm=llm, check_dns=False)
 
     out = run(main())
     assert out.layer == "L1" and out.result == "human_review"
@@ -619,6 +1068,28 @@ def test_content_gate_short_circuits_before_any_llm_call(db: FakeDB):
     assert db.documents == [] and db.logs[0]["result"] == "rejected_content_gate"
 
 
+def test_extraction_excerpt_skips_empty_tables_and_keeps_late_eligibility_facts():
+    from tools.batch_ingest import prepare_extraction_text
+
+    source = (
+        "# Official scheme page\n"
+        + ("|  |  |  |  |  |\n" * 80)
+        + "Generic ministry navigation and unrelated announcements.\n"
+        + ("General information with no scheme rules.\n" * 30)
+        + "Eligibility: small and marginal farmer families owning cultivable land are eligible.\n"
+        + "Benefit: eligible families receive financial assistance of Rs. 6,000 per year in three instalments.\n"
+        + "Apply through the official registration portal with Aadhaar and bank account details.\n"
+    )
+
+    excerpt = prepare_extraction_text(source, max_chars=700)
+
+    assert len(excerpt) <= 700
+    assert "|  |  |" not in excerpt
+    assert "Eligibility: small and marginal farmer families" in excerpt
+    assert "Rs. 6,000 per year" in excerpt
+    assert "official registration portal" in excerpt
+
+
 def test_llm_unavailable_degrades_to_human_review_not_5xx(db: FakeDB):
     from services.tinyfish.parser import LLMUnavailable, ingest_markdown
 
@@ -626,7 +1097,8 @@ def test_llm_unavailable_degrades_to_human_review_not_5xx(db: FakeDB):
         raise LLMUnavailable("LLM_BASE_URL / LLM_API_KEY not configured")
 
     async def main():
-        return await ingest_markdown(_fetch()["markdown"], fetch=_fetch(), db=db, llm=llm)
+        return await ingest_markdown(_fetch()["markdown"], fetch=_fetch(), db=db,
+                                     llm=llm, check_dns=False)
 
     out = run(main())
     assert out.result == "human_review"
@@ -641,7 +1113,8 @@ def test_ingest_without_db_still_runs_the_ladder():
     llm = _llm_factory([(seed(), 0.95)])
 
     async def main():
-        return await ingest_markdown(_fetch()["markdown"], fetch=_fetch(), db=None, llm=llm)
+        return await ingest_markdown(_fetch()["markdown"], fetch=_fetch(), db=None,
+                                     llm=llm, check_dns=False)
 
     out = run(main())
     assert out.result == "ok" and out.scheme is not None
@@ -923,6 +1396,26 @@ def test_agent_ssrf_preflight_blocks_before_the_browser_opens():
     assert opened["n"] == 0
 
 
+def test_agent_dns_preflight_failure_fails_closed_without_opening_browser():
+    from services.tinyfish.agent import TinyFishWebAgentClient
+
+    opened = {"n": 0}
+
+    async def factory():
+        opened["n"] += 1
+        raise AssertionError("browser must not launch after DNS preflight failure")
+
+    def resolver(host: str, *args: Any, **kwargs: Any) -> list[Any]:
+        raise socket.gaierror("temporary resolver failure")
+
+    agent = TinyFishWebAgentClient(browser_factory=factory, resolver=resolver,
+                                   check_dns=True, snapshots=FakeSnapshots())
+    result = run(agent.verify(SCH_ID, GOV_URL, "job-dns-failure"))
+    assert result.verification_status.value == "UNREACHABLE"
+    assert result.error_class == "dns_failure"
+    assert opened["n"] == 0
+
+
 def test_agent_snapshot_failure_does_not_change_the_verdict():
     snaps = FakeSnapshots(fail=True)
     agent, _page, _closed = _agent(OPEN_PAGE, snapshots=snaps)
@@ -1081,7 +1574,8 @@ def test_disabling_tier3_leaves_the_ingestion_path_unaffected(db: FakeDB, monkey
 
     async def main():
         return await ingest_markdown(
-            _fetch()["markdown"], fetch=_fetch(), db=db, llm=llm
+            _fetch()["markdown"], fetch=_fetch(), db=db, llm=llm,
+            check_dns=False,
         )
 
     out = run(main())
@@ -1130,7 +1624,8 @@ def test_tc_c8_over_budget_job_completes_as_unreachable_timeout(caplog):
         return page, closer
 
     agent = TinyFishWebAgentClient(
-        browser_factory=factory, snapshots=FakeSnapshots(), timeout_ms=10
+        browser_factory=factory, snapshots=FakeSnapshots(), timeout_ms=10,
+        check_dns=False,
     )
 
     with caplog.at_level(_logging.WARNING, logger="services.tinyfish.agent"):
@@ -1483,6 +1978,16 @@ def _client():
     return TestClient(app)
 
 
+async def _request(method: str, path: str, **kwargs):
+    """Use native async ASGI transport; sync TestClient can hang on streams."""
+    from services.api.main import app
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        return await client.request(method, path, **kwargs)
+
+
 def test_verify_stream_emits_sse_frames_and_finishes_on_the_verdict(monkeypatch):
     from services.api import routes
     from services.api.models import VerificationStatus
@@ -1506,11 +2011,16 @@ def test_verify_stream_emits_sse_frames_and_finishes_on_the_verdict(monkeypatch)
     monkeypatch.setattr(verify_mod, "get_db", lambda: FakeDB())
     _ = routes
 
-    resp = _client().get(f"/api/v1/verify/stream/{SCH_ID}")
-    assert resp.status_code == 200
-    assert resp.headers["content-type"].startswith("text/event-stream")
-
-    frames = [json.loads(line[6:]) for line in resp.text.splitlines() if line.startswith("data: ")]
+    # Starlette's synchronous TestClient blocks while consuming this SSE
+    # response on the current runtime. Exercise the route response's async
+    # body iterator directly so the test checks the same frames without a
+    # client-side stream adapter deadlock.
+    resp = run(verify_mod.verify_stream(SCH_ID))
+    assert resp.media_type == "text/event-stream"
+    async def collect():
+        return [chunk async for chunk in resp.body_iterator]
+    chunks = run(collect())
+    frames = [json.loads(chunk.decode().removeprefix("data: ")) for chunk in chunks]
     assert [f["status"] for f in frames] == ["ssrf_preflight", "navigating", "INTAKE_OPEN"]
     assert frames[-1]["done"] is True
     assert frames[-1]["result"]["extracted_deadline"] == "2026-12-31"
@@ -1552,8 +2062,11 @@ def test_verify_stream_issues_the_signed_link_and_never_the_bare_one(monkeypatch
     monkeypatch.setattr(verify_mod, "get_db", lambda: FakeDB())
     monkeypatch.setattr(verify_mod, "sign_snapshot_url", _sign)
 
-    resp = _client().get(f"/api/v1/verify/stream/{SCH_ID}")
-    frames = [json.loads(l[6:]) for l in resp.text.splitlines() if l.startswith("data: ")]
+    resp = run(verify_mod.verify_stream(SCH_ID))
+    async def collect():
+        return [chunk async for chunk in resp.body_iterator]
+    chunks = run(collect())
+    frames = [json.loads(chunk.decode().removeprefix("data: ")) for chunk in chunks]
     issued = frames[-1]["result"]["snapshot_url"]
 
     assert seen == [durable]                 # called once, with the durable ref
@@ -1594,7 +2107,9 @@ def test_verify_stream_404s_for_an_unknown_scheme(monkeypatch):
         raise HTTPException(status_code=404, detail=f"unknown scheme_id: {scheme_id}")
 
     monkeypatch.setattr(verify_mod, "portal_url_for", boom)
-    assert _client().get(f"/api/v1/verify/stream/nope").status_code == 404
+    with pytest.raises(HTTPException) as exc:
+        run(verify_mod.verify_stream("nope"))
+    assert exc.value.status_code == 404
 
 
 @pytest.fixture
@@ -1620,27 +2135,29 @@ def no_admin_token():
 
 
 def test_admin_refresh_is_fail_closed_when_no_token_is_configured(no_admin_token):
-    resp = _client().post("/api/v1/admin/ingest/refresh", json={"query": "pm kisan"})
+    resp = run(_request("POST", "/api/v1/admin/ingest/refresh", json={"query": "pm kisan"}))
     assert resp.status_code == 401
     assert "ADMIN_SERVICE_TOKEN" in resp.json()["detail"]  # actionable, not a bare 401
 
 
 def test_admin_refresh_rejects_a_wrong_token(admin_token):
-    resp = _client().post(
+    resp = run(_request(
+        "POST",
         "/api/v1/admin/ingest/refresh",
         json={"query": "pm kisan"},
         headers={"X-Admin-Token": "wrong"},
-    )
+    ))
     assert resp.status_code == 401
     assert resp.json()["detail"] == "invalid admin token"
 
 
 def test_admin_refresh_accepts_a_valid_token_and_queues_the_job(admin_token):
-    resp = _client().post(
+    resp = run(_request(
+        "POST",
         "/api/v1/admin/ingest/refresh",
         json={"query": "pm kisan", "max_results": 3},
         headers={"Authorization": f"Bearer {admin_token}"},
-    )
+    ))
     assert resp.status_code == 202
     body = resp.json()
     assert body["status"] == "accepted" and body["query"] == "pm kisan"
@@ -1653,10 +2170,11 @@ def test_admin_refresh_accepts_a_valid_token_and_queues_the_job(admin_token):
     assert report["stage"] in {"queued", "search", "fetch+parse", "done"}
 
     # job read-back is authenticated too
-    assert _client().get(
+    assert run(_request(
+        "GET",
         f"/api/v1/admin/ingest/jobs/{body['job_id']}", headers={"X-Admin-Token": admin_token}
-    ).status_code == 200
-    assert _client().get(f"/api/v1/admin/ingest/jobs/{body['job_id']}").status_code == 401
+    )).status_code == 200
+    assert run(_request("GET", f"/api/v1/admin/ingest/jobs/{body['job_id']}")).status_code == 401
     admin_mod.JOBS.pop(body["job_id"], None)
 
 
@@ -1712,7 +2230,9 @@ def test_admin_refresh_pipeline_runs_search_fetch_parse():
             setattr(admin_mod, k, v)
 
     report = admin_mod.JOBS.setdefault("job-xyz", {})
-    assert seen["queries"] == ["pm kisan"] and seen["max_results"] == 5
+    assert seen["queries"] == [
+        "pm kisan official scheme eligibility benefits application guidelines FAQ"
+    ] and seen["max_results"] == 5
     assert seen["fetched"] == ["https://pmkisan.gov.in/",
                                "https://services.punjab.gov.in/y"]
     assert seen["parsed"] == 2 and seen["fetch_arg_is_result"] is True
@@ -1721,7 +2241,7 @@ def test_admin_refresh_pipeline_runs_search_fetch_parse():
 
 
 def test_openapi_publishes_all_step3_routes():
-    paths = _client().get("/openapi.json").json()["paths"]
+    paths = run(_request("GET", "/openapi.json")).json()["paths"]
     assert "/api/v1/verify/stream/{scheme_id}" in paths
     assert "/api/v1/admin/ingest/refresh" in paths
     assert "/api/v1/profile/qualify" in paths

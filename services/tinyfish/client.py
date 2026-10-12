@@ -341,6 +341,10 @@ class TinyFishFetchClient(_BaseClient):
         url: str,
         timeout_ms: int | None = None,
         wait_for: str | None = None,
+        *,
+        include_links: bool = False,
+        include_iframe_links: bool = False,
+        purpose: str | None = None,
     ) -> FetchResult:
         """``render(url, timeout_ms, wait_for) → FetchResult`` (§7.2).
 
@@ -359,6 +363,12 @@ class TinyFishFetchClient(_BaseClient):
         payload: dict[str, Any] = {"urls": [url], "timeout_ms": budget}
         if wait_for:
             payload["wait_for"] = wait_for
+        if include_links:
+            payload["links"] = True
+        if include_iframe_links:
+            payload["iframe_links"] = True
+        if purpose:
+            payload["purpose"] = purpose[:2000]
         body = await self._post_json("/", payload)
         if not isinstance(body, dict):
             raise TinyFishUnavailable("fetch: response was not an object")
@@ -389,6 +399,7 @@ class TinyFishFetchClient(_BaseClient):
 
         return FetchResult(
             markdown=markdown,
+            source_url=url,
             final_url=final_url,
             http_status=status,
             rendered_at=str(
@@ -397,4 +408,8 @@ class TinyFishFetchClient(_BaseClient):
                 or datetime.now(timezone.utc).isoformat()
             ),
             content_hash=str((first or {}).get("content_hash") or _sha256(markdown)),
+            links=list((first or {}).get("links") or []),
+            iframe_links=list((first or {}).get("iframe_links") or []),
+            title=(first or {}).get("title"),
+            published_date=(first or {}).get("published_date"),
         )

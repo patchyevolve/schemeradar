@@ -15,6 +15,7 @@ pydantic==2.13.5               # validation ladder L1-L5 requires Pydantic v2
 pydantic-settings==2.15.0
 python-dotenv==1.2.4
 httpx==0.28.1
+pypdf==6.20.0                 # bounded text extraction for official PDF sources
 
 # --- storage & retrieval ----------------------------------------------------
 qdrant-client==1.19.1

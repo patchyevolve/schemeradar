@@ -1,0 +1,1145 @@
+{
+  "catalog_version": 1,
+  "generated_at": "2026-10-11",
+  "purpose": "Pre-LLM source discovery and review. This file contains no parsed scheme records and is not citizen-facing data.",
+  "audit_mode": {
+    "llm_calls": 0,
+    "database_writes": 0,
+    "reviewed_by_fetch": true,
+    "fetch_method": "TinyFish rendered text; official PDF text fallback was used where noted",
+    "important": "A source marked source_ready is suitable to attempt parsing, not proof that the scheme record is correct or currently open. Re-fetch and compare content_hash before parsing."
+  },
+  "records": [
+    {
+      "seed_index": 1,
+      "persona": "farmer",
+      "canonical_name": "Pradhan Mantri Kisan Samman Nidhi",
+      "scheme_key": "pm_kisan",
+      "seed_query": "PM Kisan eligibility benefits documents vikaspedia",
+      "status": "source_ready",
+      "scope": "central",
+      "sources": [
+        {
+          "role": "official_faq",
+          "url": "https://pmkisan.gov.in/Documents/RevisedFAQ.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 19102,
+          "supports": [
+            "eligibility",
+            "benefit",
+            "exclusions",
+            "application"
+          ],
+          "limitations": "PDF text is extractable. Verify the benefit cycle and current operational changes against an up-to-date official notice.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        },
+        {
+          "role": "official_service_summary",
+          "url": "https://web.umang.gov.in/landing/scheme/detail/pradhan-mantri-kisan-samman-nidhi_pm-kisan.html",
+          "fetch_result": "ok",
+          "visible_chars": 5050,
+          "supports": [
+            "benefit_summary",
+            "eligibility",
+            "application"
+          ],
+          "limitations": "Secondary government service summary; prefer the PM-Kisan FAQ for governing rules.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        }
+      ]
+    },
+    {
+      "seed_index": 2,
+      "persona": "farmer",
+      "canonical_name": "Pradhan Mantri Fasal Bima Yojana",
+      "scheme_key": "pmfby",
+      "seed_query": "PM Fasal Bima Yojana guidelines eligibility pib",
+      "status": "source_ready",
+      "scope": "central_with_state_season_notifications",
+      "sources": [
+        {
+          "role": "operational_guidelines",
+          "url": "https://pmfby.gov.in/pdf/Revised_Operational_Guidelines.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 255993,
+          "supports": [
+            "coverage",
+            "risks_and_exclusions",
+            "sum_insured",
+            "premium_rates",
+            "claims",
+            "grievances"
+          ],
+          "limitations": "State and season notifications determine locally available crops, areas, insurer, and dates. The PDF is large; select relevant sections and retain page references.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        },
+        {
+          "role": "dated_policy_update",
+          "url": "https://pib.gov.in/PressReleasePage.aspx?PRID=2042245",
+          "fetch_result": "ok",
+          "visible_chars": 3198,
+          "published_at": "2024-08-06",
+          "supports": [
+            "farmer_premium_caps",
+            "claims_context"
+          ],
+          "limitations": "Use as a dated update, not a substitute for current season notifications.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Revival of Fasal Bima Yojana"
+        }
+      ]
+    },
+    {
+      "seed_index": 3,
+      "persona": "farmer",
+      "canonical_name": "Kisan Credit Card / Modified Interest Subvention Scheme",
+      "scheme_key": "kcc_miss",
+      "seed_query": "Kisan Credit Card interest subsidy scheme details vikaspedia",
+      "status": "source_ready_with_currentness_review",
+      "scope": "central; lending terms may depend on bank and current notification",
+      "sources": [
+        {
+          "role": "current_policy_update",
+          "url": "https://pib.gov.in/PressReleasePage.aspx?PRID=2238004",
+          "fetch_result": "ok",
+          "published_at": "2026-03-11",
+          "supports": [
+            "KCC_limit_update",
+            "MISS_overview"
+          ],
+          "limitations": "Earlier PMO material reports different limits and subvention terms. Preserve the source date and do not merge figures from separate policy periods.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "visible_chars": 15254,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Kisan Credit Card: Fueling Growth in Agriculture"
+        }
+      ]
+    },
+    {
+      "seed_index": 4,
+      "persona": "farmer",
+      "canonical_name": "Sub-Mission on Agricultural Mechanization",
+      "scheme_key": "smam",
+      "seed_query": "Sub Mission on Agricultural Mechanization tractor subsidy eligibility",
+      "status": "source_ready",
+      "scope": "central_with_state_implementation",
+      "sources": [
+        {
+          "role": "operational_guidelines",
+          "url": "https://farmech.dac.gov.in/Content/New_Folder/Revised_SMAM_Guidelines_%282025%29_With_Covering.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 82951,
+          "published_at": "2025",
+          "supports": [
+            "eligibility",
+            "mechanization_assistance",
+            "implementation"
+          ],
+          "limitations": "Check state implementation notices for current subsidy windows, equipment ceilings, and application routes.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 0,
+          "extraction_method": "pypdf_text_fallback",
+          "content_hash": "ea5f138d9bb2bb53097514c99e80886079e358ce3d2fdf38970546dc72f0783a",
+          "final_url": "https://farmech.dac.gov.in/Content/New_Folder/Revised_SMAM_Guidelines_%282025%29_With_Covering.pdf"
+        }
+      ]
+    },
+    {
+      "seed_index": 5,
+      "persona": "farmer",
+      "canonical_name": "Pradhan Mantri Krishi Sinchayee Yojana",
+      "scheme_key": "pmksy",
+      "seed_query": "Pradhan Mantri Krishi Sinchayee Yojana components guidelines",
+      "status": "needs_component_source_review",
+      "scope": "multi-component central/state programme",
+      "sources": [],
+      "limitations": "National PMKSY and PDMC portals returned 403. Search returned sources for different components and a separate Water Resources programme. Do not parse an umbrella record until the intended component and its current rules are explicitly identified."
+    },
+    {
+      "seed_index": 6,
+      "persona": "farmer",
+      "canonical_name": "Paramparagat Krishi Vikas Yojana",
+      "scheme_key": "pkvy",
+      "seed_query": "Paramparagat Krishi Vikas Yojana organic farming financial assistance",
+      "status": "source_ready_with_freshness_review",
+      "scope": "central_with_state_implementation",
+      "sources": [
+        {
+          "role": "operational_guidelines",
+          "url": "https://agriwelfare.gov.in/Documents/Revised_PKVY_Guidelines_022-2023_PUB_1FEB2022.pdf",
+          "fetch_result": "ok_via_pdf_text_fallback",
+          "visible_chars": 45959,
+          "published_at": "2022-02 (document stamped 2022; title identifies revised PKVY guidelines)",
+          "supports": [
+            "programme_guidelines",
+            "eligibility",
+            "assistance"
+          ],
+          "limitations": "Text was recovered using the PDF fallback because TinyFish rendering returned no body. Do not use the older 2015 proposed guideline. Confirm superseding notifications and current cycle.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 0,
+          "extraction_method": "pypdf_text_fallback",
+          "content_hash": "03f5fb628c75bb359d79ce51f60d529f82d0391c986bda2fcc1e3c5e8b975be3"
+        },
+        {
+          "role": "dated_policy_update",
+          "url": "https://www.pib.gov.in/PressReleseDetailm.aspx?PRID=2175205",
+          "fetch_result": "ok",
+          "visible_chars": 10134,
+          "published_at": "2025-10-06",
+          "supports": [
+            "current_programme_context",
+            "assistance_summary"
+          ],
+          "limitations": "PIB backgrounder is a dated summary, not a replacement for the operative guidelines.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        }
+      ]
+    },
+    {
+      "seed_index": 7,
+      "persona": "student",
+      "canonical_name": "Post-Matric Scholarship for Scheduled Caste Students",
+      "scheme_key": "sc_post_matric",
+      "seed_query": "Post Matric Scholarship SC students eligibility income ceiling vikaspedia",
+      "status": "hold_wrong_or_incomplete_sources",
+      "scope": "centrally sponsored; state implementation",
+      "sources": [],
+      "limitations": "Search returned a detailed ST post-matric PDF and an SC pre-matric page. Both are wrong for this seed. Do not parse either. Need an exact SC post-matric guideline/FAQ and state scope."
+    },
+    {
+      "seed_index": 8,
+      "persona": "student",
+      "canonical_name": "Central Sector Scheme of Scholarship for College and University Students",
+      "scheme_key": "csss_college_scholarship",
+      "seed_query": "Central Sector Scheme of Scholarship for College and University Students eligibility",
+      "status": "source_ready_with_freshness_review",
+      "scope": "central; application cycle-specific",
+      "sources": [
+        {
+          "role": "official_faq",
+          "url": "https://scholarships.gov.in/public/schemeGuidelines/FAQ_DOHE_CSSS.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 19267,
+          "published_at": "2025-26",
+          "supports": [
+            "eligibility",
+            "application_cycle",
+            "scholarship_conditions"
+          ],
+          "limitations": "The exact target query returned zero hits on a repeat search; direct-fetch this known official URL and check for a newer cycle before parsing.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        }
+      ]
+    },
+    {
+      "seed_index": 9,
+      "persona": "student",
+      "canonical_name": "AICTE Pragati Scholarship",
+      "scheme_key": "pragati_scholarship",
+      "seed_query": "Pragati Scholarship for Girls AICTE eligibility amount documents",
+      "status": "source_ready",
+      "scope": "central; application cycle-specific",
+      "sources": [
+        {
+          "role": "official_faq",
+          "url": "https://aicte.gov.in/sites/default/files/stdc/Pragati/FAQs-Pragati%20Scheme.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 12805,
+          "supports": [
+            "eligibility",
+            "benefits",
+            "application"
+          ],
+          "limitations": "FAQ says applications are announced on AICTE/NSP; verify current cycle and deadline separately.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 0,
+          "extraction_method": "pypdf_text_fallback",
+          "content_hash": "dd790e84cae38c768fc8a52a816a41549f0121d79b2f474b201b51d6d3c1710c",
+          "final_url": "https://aicte.gov.in/sites/default/files/stdc/Pragati/FAQs-Pragati%20Scheme.pdf"
+        }
+      ]
+    },
+    {
+      "seed_index": 10,
+      "persona": "student",
+      "canonical_name": "PM YASASVI",
+      "scheme_key": "pm_yasasvi",
+      "seed_query": "PM YASASVI scholarship scheme OBC EBC DNT eligibility criteria",
+      "status": "source_ready_with_freshness_review",
+      "scope": "central; multiple sub-schemes",
+      "sources": [
+        {
+          "role": "umbrella_guidelines",
+          "url": "https://socialjustice.gov.in/public/ckeditor/upload/65661651839791.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 118638,
+          "supports": [
+            "sub_scheme_structure",
+            "eligibility",
+            "benefits"
+          ],
+          "limitations": "Guideline coverage ends in 2025-26. Identify the exact sub-scheme and confirm 2026-27 rules before parsing.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        }
+      ]
+    },
+    {
+      "seed_index": 11,
+      "persona": "student",
+      "canonical_name": "National Means-cum-Merit Scholarship Scheme",
+      "scheme_key": "nmmss",
+      "seed_query": "National Means cum Merit Scholarship Scheme NMMS eligibility",
+      "status": "source_ready_with_pdf_quality_review",
+      "scope": "central; state examination/application workflow",
+      "sources": [
+        {
+          "role": "official_guidelines",
+          "url": "https://scholarships.gov.in/public/schemeGuidelines/NMMSSGuidelines.pdf",
+          "fetch_result": "ok_via_pdf_text_fallback",
+          "visible_chars": 15326,
+          "supports": [
+            "eligibility",
+            "income_limit",
+            "award"
+          ],
+          "limitations": "Text extraction is somewhat garbled. Review key amounts and conditions against the PDF pages before accepting parsed values.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        }
+      ]
+    },
+    {
+      "seed_index": 12,
+      "persona": "student",
+      "canonical_name": "Begum Hazrat Mahal National Scholarship",
+      "scheme_key": "begum_hazrat_mahal_scholarship",
+      "seed_query": "Begum Hazrat Mahal National Scholarship girls eligibility criteria",
+      "status": "hold_current_availability",
+      "scope": "central; minority girls; school grades 9-12 per FAQ",
+      "sources": [
+        {
+          "role": "official_faq",
+          "url": "https://scholarships.gov.in/public/schemeGuidelines/1053_F.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 13170,
+          "supports": [
+            "eligibility",
+            "application"
+          ],
+          "limitations": "Substantive FAQ, but current NSP listing checked in the audit did not show this scheme for 2026-27. Do not mark open for applications without current confirmation.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        }
+      ]
+    },
+    {
+      "seed_index": 13,
+      "persona": "women_msme",
+      "canonical_name": "Pradhan Mantri Mudra Yojana",
+      "scheme_key": "pm_mudra",
+      "seed_query": "PM Mudra Yojana loan categories eligibility documents vikaspedia",
+      "status": "hold_visible_source_missing",
+      "scope": "central; lender-mediated",
+      "sources": [],
+      "limitations": "UMANG returned 31k raw characters but only 604 visible characters of app-shell text. A PIB 2024 article was useful for categories, but its exact fetch URL should be added from the approved audit before parsing. Need current lender/application instructions."
+    },
+    {
+      "seed_index": 14,
+      "persona": "women_msme",
+      "canonical_name": "Stand-Up India",
+      "scheme_key": "stand_up_india",
+      "seed_query": "Stand Up India scheme SC ST women entrepreneurs guidelines",
+      "status": "hold_current_status",
+      "scope": "central; bank-mediated",
+      "sources": [
+        {
+          "role": "official_scheme_guidelines",
+          "url": "https://samarth.powermin.gov.in/content/policies/5f0f87c0-6620-4fae-b440-d11d67d0b2a0.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 12724,
+          "supports": [
+            "eligibility",
+            "handholding"
+          ],
+          "limitations": "Official Ministry of Power hosted copy, but current scheme availability is unclear after the reported 2025 extension. Confirm current Government of India policy status and an official bank portal before parsing.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        }
+      ]
+    },
+    {
+      "seed_index": 15,
+      "persona": "women_msme",
+      "canonical_name": "Prime Minister's Employment Generation Programme",
+      "scheme_key": "pmegp",
+      "seed_query": "Prime Minister Employment Generation Programme PMEGP subsidy eligibility",
+      "status": "source_ready_with_guideline_refresh",
+      "scope": "central; KVIC/state nodal agency implementation",
+      "sources": [
+        {
+          "role": "official_faq",
+          "url": "https://pmegp.msme.gov.in/Home/FAQ",
+          "fetch_result": "ok_in_prior_audit",
+          "visible_chars": 4644,
+          "supports": [
+            "eligibility",
+            "subsidy",
+            "application"
+          ],
+          "limitations": "The live KVIC portal endpoint returned HTTP 0 in a repeat attempt. Direct-fetch the FAQ URL before parsing and confirm the current guideline revision.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "PMEGP Home"
+        },
+        {
+          "role": "secondary_official_summary",
+          "url": "https://web.umang.gov.in/landing/scheme/detail/prime-ministers-employment-generation-programme-pmegp_pmegp.html",
+          "fetch_result": "ok",
+          "visible_chars": 13240,
+          "supports": [
+            "scheme_summary",
+            "eligibility",
+            "application"
+          ],
+          "limitations": "Use for cross-check only; prefer MSME/KVIC operative rules.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Prime Minister's Employment Generation Programme"
+        }
+      ]
+    },
+    {
+      "seed_index": 16,
+      "persona": "women_msme",
+      "canonical_name": "NBCFDC Mahila Samriddhi Yojana",
+      "scheme_key": "mahila_samriddhi_nbcfdc",
+      "seed_query": "Mahila Samridhi Yojana NBCFDC loan terms women eligibility",
+      "status": "source_ready_with_lending_channel_review",
+      "scope": "central; delivered through NBCFDC channel partners",
+      "sources": [
+        {
+          "role": "ministry_scheme_summary",
+          "url": "https://socialjustice.gov.in/schemes/13",
+          "fetch_result": "ok",
+          "visible_chars": 2446,
+          "supports": [
+            "beneficiary_income",
+            "loan_ceiling",
+            "interest_rate"
+          ],
+          "limitations": "The page summarizes multiple NBCFDC products; ensure the facts are attached specifically to Mahila Samriddhi.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Entrepreneurial Schemes of NBCFDC | Department of Social Justice and Empowerment - Government of India"
+        },
+        {
+          "role": "official_service_summary",
+          "url": "https://web.umang.gov.in/landing/scheme/detail/credit-based-schemes-for-sc-mahila-samriddhi-yojana_cbssc-msy.html",
+          "fetch_result": "ok",
+          "visible_chars": 5110,
+          "supports": [
+            "scheme_summary",
+            "eligibility",
+            "application"
+          ],
+          "limitations": "Confirm current loan terms and channel partner with NBCFDC.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Mahila Samriddhi Yojana"
+        }
+      ]
+    },
+    {
+      "seed_index": 17,
+      "persona": "women_msme",
+      "canonical_name": "Lakhpati Didi initiative",
+      "scheme_key": "lakhpati_didi",
+      "seed_query": "Lakhpati Didi scheme benefits eligibility criteria pib",
+      "status": "hold_not_individual_entitlement",
+      "scope": "central SHG livelihood initiative",
+      "sources": [],
+      "limitations": "Official portal returned 403. PIB explainer is useful background but describes an SHG livelihood/household income target, not a direct fixed cash entitlement. Do not model as a conventional individual benefit scheme without a separately defined record type."
+    },
+    {
+      "seed_index": 18,
+      "persona": "women_msme",
+      "canonical_name": "PM Vishwakarma",
+      "scheme_key": "pm_vishwakarma",
+      "seed_query": "PM Vishwakarma scheme trades financial support eligibility pib",
+      "status": "source_ready_with_live_portal_review",
+      "scope": "central; eligible traditional trades",
+      "sources": [
+        {
+          "role": "scheme_guidelines",
+          "url": "https://rdsdejharkhand.dgt.gov.in/sites/default/files/2023-09/PM%20Vishwakarma-Guidelines-final%20%282%29_compressed.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 120868,
+          "supports": [
+            "trades",
+            "eligibility",
+            "credit_support",
+            "training",
+            "incentives"
+          ],
+          "limitations": "Guidelines are from 2023. The official FAQ timed out; use the 2025 update for status context and re-check current portal behavior.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "eng-v13.1-PM Vishwakarma-Guidelines-final (Small2)"
+        },
+        {
+          "role": "dated_status_update",
+          "url": "https://www.pib.gov.in/PressNoteDetails.aspx?NoteId=155216&ModuleId=3",
+          "fetch_result": "ok",
+          "visible_chars": 13298,
+          "published_at": "2025-09-16",
+          "supports": [
+            "scheme_status_context",
+            "implementation_context"
+          ],
+          "limitations": "News/update, not the governing eligibility document.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "PIB Backgrounder"
+        }
+      ]
+    },
+    {
+      "seed_index": 19,
+      "persona": "senior_healthcare",
+      "canonical_name": "Ayushman Bharat Pradhan Mantri Jan Arogya Yojana",
+      "scheme_key": "pm_jay",
+      "seed_query": "Ayushman Bharat PMJAY eligibility entitlement criteria vikaspedia",
+      "status": "source_ready_with_scope_review",
+      "scope": "central; expansion for age 70+; state implementation variation",
+      "sources": [
+        {
+          "role": "official_state_faq",
+          "url": "https://ayushmanbharat.haryana.gov.in/frequently-asked-questions/",
+          "fetch_result": "ok",
+          "visible_chars": 5462,
+          "supports": [
+            "coverage_amount",
+            "coverage_basics"
+          ],
+          "limitations": "Haryana-specific. Do not use for central beneficiary eligibility outside the state.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Frequently Asked Questions | Ayushman Bharat, Haryana | India"
+        }
+      ],
+      "parse_gate": "Add the official central 70+ expansion notice and a central/general eligibility reference; separate general PM-JAY rules from the 70+ expansion."
+    },
+    {
+      "seed_index": 20,
+      "persona": "senior_healthcare",
+      "canonical_name": "Atal Pension Yojana",
+      "scheme_key": "atal_pension_yojana",
+      "seed_query": "Atal Pension Yojana contribution age pension tiers pib",
+      "status": "source_ready_with_contribution_table_review",
+      "scope": "central; bank/post-office enrollment",
+      "sources": [
+        {
+          "role": "official_explainer",
+          "url": "https://www.pib.gov.in/PressNoteDetails.aspx?NoteId=154432&ModuleId=3&reg=1&lang=9",
+          "fetch_result": "ok",
+          "visible_chars": 6357,
+          "published_at": "2025-05-08",
+          "supports": [
+            "eligibility_summary",
+            "pension_benefit_summary"
+          ],
+          "limitations": "The Jan Suraksha APY PDF returned empty. Do not extract contribution-by-age figures from the search snippet; obtain a verified schedule first.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "PIB Backgrounder"
+        }
+      ]
+    },
+    {
+      "seed_index": 21,
+      "persona": "senior_healthcare",
+      "canonical_name": "Indira Gandhi National Old Age Pension Scheme",
+      "scheme_key": "ignoaps",
+      "seed_query": "Indira Gandhi National Old Age Pension Scheme IGNOAPS eligibility BPL",
+      "status": "source_ready_with_state_overlay",
+      "scope": "central pension with state top-ups/implementation",
+      "sources": [
+        {
+          "role": "official_service_summary",
+          "url": "https://web.umang.gov.in/landing/scheme/detail/nsap-indira-gandhi-national-old-age-pension-scheme_nsap-ignoaps.html",
+          "fetch_result": "ok",
+          "visible_chars": 5034,
+          "supports": [
+            "central_age_and_bpl_summary",
+            "central_pension_summary"
+          ],
+          "limitations": "Central NSAP FAQ timed out. State pages differ (for example, age thresholds); require the applicant's state for final criteria and amount.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "NSAP - Indira Gandhi National Old Age Pension Scheme"
+        }
+      ]
+    },
+    {
+      "seed_index": 22,
+      "persona": "senior_healthcare",
+      "canonical_name": "Rashtriya Vayoshri Yojana",
+      "scheme_key": "rvy",
+      "seed_query": "Rashtriya Vayoshri Yojana assisted living devices eligibility",
+      "status": "source_ready_with_current_status_review",
+      "scope": "central; implemented through designated agencies/camps",
+      "sources": [
+        {
+          "role": "scheme_guidelines",
+          "url": "https://socialjustice.gov.in/writereaddata/UploadFile/63491659437974.pdf",
+          "fetch_result": "ok_via_pdf_text_fallback",
+          "visible_chars": 224276,
+          "supports": [
+            "eligibility",
+            "assistive_devices",
+            "implementation"
+          ],
+          "limitations": "Large PDF; review RVY-specific appendix and avoid unrelated AVYAY provisions.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Atal Vayo Abhyuday Yojana"
+        },
+        {
+          "role": "current_status_update",
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2313057",
+          "fetch_result": "ok",
+          "published_at": "2026-09-21",
+          "supports": [
+            "active_under_avyay_context",
+            "broad_beneficiary_summary"
+          ],
+          "limitations": "Short high-level release; detailed age/income/device rules belong to the guideline.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "visible_chars": 3600,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Assistive Devices, Elderline and Trained Caregivers Strengthen Support for Senior Citizens"
+        }
+      ]
+    },
+    {
+      "seed_index": 23,
+      "persona": "senior_healthcare",
+      "canonical_name": "Pradhan Mantri Vaya Vandana Yojana",
+      "scheme_key": "pm_vaya_vandana",
+      "seed_query": "Pradhan Mantri Vaya Vandana Yojana LIC pension terms",
+      "status": "exclude_closed_to_new_enrollment",
+      "scope": "central historical pension product",
+      "sources": [],
+      "limitations": "Official extension found only through 2023-03-31. No current new-enrollment source found. Keep out of the active-applicant catalog unless a current official reopening notice is found."
+    },
+    {
+      "seed_index": 24,
+      "persona": "senior_healthcare",
+      "canonical_name": "Senior Citizens Savings Scheme",
+      "scheme_key": "scss",
+      "seed_query": "Senior Citizens Savings Scheme SCSS interest rate eligibility",
+      "status": "source_ready_but_rate_missing",
+      "scope": "central small-savings product",
+      "sources": [
+        {
+          "role": "official_scheme_terms",
+          "url": "https://www.nsiindia.gov.in/InternalPage.aspx?Id_Pk=62",
+          "fetch_result": "ok",
+          "visible_chars": 1196,
+          "supports": [
+            "eligibility",
+            "deposit_limits",
+            "tenure",
+            "withdrawal_terms"
+          ],
+          "limitations": "Current interest rate is not in the fetched page. Fetch and verify the applicable quarter's Department of Economic Affairs notice before parsing any rate.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render"
+        }
+      ]
+    },
+    {
+      "seed_index": 25,
+      "persona": "bpl",
+      "canonical_name": "Pradhan Mantri Awaas Yojana - Gramin",
+      "scheme_key": "pmay_g",
+      "seed_query": "PM Awas Yojana Gramin financial assistance eligibility SECC vikaspedia",
+      "status": "source_ready_with_portal_access_review",
+      "scope": "central rural housing; state/Gram Sabha selection",
+      "sources": [
+        {
+          "role": "official_policy_summary",
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2074713",
+          "fetch_result": "ok",
+          "visible_chars": 10350,
+          "supports": [
+            "selection_process",
+            "target_context",
+            "application_summary"
+          ],
+          "limitations": "The PMAY-G portal returned HTTP 401. Search produced multiple PMAY-Urban pages; reject those. The PIB source is policy context, not a replacement for current Gramin operational guidelines.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Pradhan Mantri Awas Yojana- Rural"
+        }
+      ]
+    },
+    {
+      "seed_index": 26,
+      "persona": "bpl",
+      "canonical_name": "PM Street Vendor's AtmaNirbhar Nidhi",
+      "scheme_key": "pm_svanidhi",
+      "seed_query": "PM SVANidhi street vendors micro credit scheme guidelines pib",
+      "status": "source_ready_with_guideline_refresh",
+      "scope": "central; urban local body/vendor eligibility context",
+      "sources": [
+        {
+          "role": "restructuring_and_current_terms",
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2161157",
+          "fetch_result": "ok",
+          "visible_chars": 4628,
+          "published_at": "2025-08-27",
+          "supports": [
+            "extension_to_2030",
+            "loan_tranches",
+            "credit_card_update"
+          ],
+          "limitations": "Official application portal timed out. A government-hosted guideline copy fetched in the audit; add its exact URL before parser enablement.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Cabinet approves restructuring & extension of lending period beyond 31.12.2024 of PM Street Vendors AtmaNirbhar Nidhi (PM SVANidhi) Scheme"
+        }
+      ]
+    },
+    {
+      "seed_index": 27,
+      "persona": "bpl",
+      "canonical_name": "Antyodaya Anna Yojana",
+      "scheme_key": "aay",
+      "seed_query": "Antyodaya Anna Yojana AAY ration entitlement BPL criteria",
+      "status": "source_ready_with_state_selection_overlay",
+      "scope": "central entitlement; state selection criteria",
+      "sources": [
+        {
+          "role": "current_central_entitlement",
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2179514",
+          "fetch_result": "ok",
+          "published_at": "2025-10",
+          "supports": [
+            "AAY_35kg_per_household",
+            "free_NFSA_grains_period",
+            "selection_context"
+          ],
+          "limitations": "DFPD scheme page is a shell. Use state/UT policy for household identification and local ration-card workflows.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "visible_chars": 24867,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Securing Every Plate"
+        }
+      ]
+    },
+    {
+      "seed_index": 28,
+      "persona": "bpl",
+      "canonical_name": "Pradhan Mantri Ujjwala Yojana",
+      "scheme_key": "pmuy",
+      "seed_query": "PM Ujjwala Yojana free LPG connection eligibility BPL women",
+      "status": "source_ready",
+      "scope": "central; LPG distributor application",
+      "sources": [
+        {
+          "role": "official_faq",
+          "url": "https://pmuy.gov.in/faq.html",
+          "fetch_result": "ok",
+          "visible_chars": 13708,
+          "supports": [
+            "eligibility",
+            "connection_support",
+            "application"
+          ],
+          "limitations": "Use the dedicated Ujjwala 2.0 criteria page for current connection-specific conditions; avoid treating the overall achievement dashboard as eligibility evidence.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "PMUY : Home"
+        },
+        {
+          "role": "current_portal_context",
+          "url": "https://pmuy.gov.in/",
+          "fetch_result": "ok",
+          "visible_chars": 5788,
+          "supports": [
+            "portal_identity",
+            "current_achievement_context"
+          ],
+          "limitations": "Homepage is context only, not detailed eligibility rules.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "PMUY : Home"
+        }
+      ]
+    },
+    {
+      "seed_index": 29,
+      "persona": "bpl",
+      "canonical_name": "Deendayal Antyodaya Yojana - National Urban Livelihoods Mission",
+      "scheme_key": "day_nulm",
+      "seed_query": "Deendayal Antyodaya Yojana DAY NULM components guidelines",
+      "status": "hold_current_program_status",
+      "scope": "central urban livelihoods; component-specific eligibility",
+      "sources": [
+        {
+          "role": "mission_guidelines",
+          "url": "https://nulm.gov.in/PDF/NULM_Mission/NULM_mission_document.pdf",
+          "fetch_result": "ok",
+          "visible_chars": 61755,
+          "supports": [
+            "mission_structure",
+            "components"
+          ],
+          "limitations": "Mission and component documents appear old. Current programme status and application routes need confirmation before parsing as active.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "DAY-NULM Mission Document-2.indd"
+        }
+      ]
+    },
+    {
+      "seed_index": 30,
+      "persona": "bpl",
+      "canonical_name": "Pradhan Mantri Garib Kalyan Anna Yojana / free NFSA foodgrains",
+      "scheme_key": "pmgkay_nfsa_free_grains",
+      "seed_query": "PM Garib Kalyan Anna Yojana foodgrains entitlement details",
+      "status": "source_ready_with_entitlement_disambiguation",
+      "scope": "central food entitlement delivered via ration-card system",
+      "sources": [
+        {
+          "role": "official_current_entitlement_summary",
+          "url": "https://www.pib.gov.in/PressReleseDetailm.aspx?PRID=2086345",
+          "fetch_result": "ok",
+          "visible_chars": 26520,
+          "published_at": "2024",
+          "supports": [
+            "five_year_extension_from_2024",
+            "PHH_5kg_per_person",
+            "AAY_35kg_per_household"
+          ],
+          "limitations": "DFPD page is a shell and older UMANG copy describes an earlier PM-GKAY phase. Treat current free NFSA entitlement distinctly from the pandemic-era additional-grain programme.",
+          "fetch_verified_at": "2026-10-11",
+          "http_status": 200,
+          "extraction_method": "tinyfish_render",
+          "fetched_title": "Year-End- Review of Department of Food and Public Distribution– 2024"
+        }
+      ]
+    },
+    {
+      "seed_index": 31,
+      "persona": "farmer",
+      "canonical_name": "Pradhan Mantri Kisan Maandhan Yojana",
+      "scheme_key": "pm_kisan_maandhan",
+      "seed_query": "Pradhan Mantri Kisan Maandhan Yojana official eligibility pension benefits",
+      "status": "source_ready_with_portal_refresh",
+      "scope": "central contributory pension for small and marginal farmers",
+      "sources": [
+        {
+          "role": "current_scheme_backgrounder",
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2309204",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 12198,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "published_at": "2026-09-11",
+          "fetched_title": "Securing Farmers’ Future with Dignity",
+          "supports": ["eligibility_summary", "assured_pension", "scheme_context"],
+          "limitations": "Official scheme portal and operational guideline PDF timed out/returned no extractable body in this pass. Use this current PIB backgrounder for facts it states, and re-fetch the official portal before accepting application details."
+        }
+      ]
+    },
+    {
+      "seed_index": 32,
+      "persona": "farmer",
+      "canonical_name": "Pradhan Mantri Matsya Sampada Yojana",
+      "scheme_key": "pm_matsya_sampada",
+      "seed_query": "Pradhan Mantri Matsya Sampada Yojana official guidelines beneficiary assistance",
+      "status": "source_ready_with_currentness_review",
+      "scope": "central; fisheries beneficiaries; state/UT implementation",
+      "sources": [
+        {
+          "role": "official_farmer_faq",
+          "url": "https://pmmsy.dof.gov.in/assets/documents/farmers-corner/FAQ%20for%20Farmers.pdf",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 9590,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "fetched_title": "PowerPoint Presentation",
+          "supports": ["beneficiary_categories", "assistance", "application_context"],
+          "limitations": "Verify current scheme period, state implementation, and current application window."
+        },
+        {
+          "role": "official_beneficiary_booklet",
+          "url": "https://static.pib.gov.in/WriteReadData/userfiles/PMMSY%20BookEnglish.pdf",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 34140,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "supports": ["beneficiary_oriented_subcomponents", "assistance_context"],
+          "limitations": "Booklet dated September 2020; use as background and confirm current continuation/amendments."
+        }
+      ]
+    },
+    {
+      "seed_index": 33,
+      "persona": "women_msme",
+      "canonical_name": "Pradhan Mantri Matru Vandana Yojana",
+      "scheme_key": "pmmvy",
+      "seed_query": "Pradhan Mantri Matru Vandana Yojana current official eligibility benefits",
+      "status": "source_ready",
+      "scope": "central maternity benefit scheme with state/UT implementation",
+      "sources": [
+        {
+          "role": "current_ministry_scheme_page",
+          "url": "https://www.wcd.gov.in/offerings/pradhan-mantri-matru-vandana-yojana",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 31765,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "fetched_title": "Pradhan Mantri Matru Vandana Yojana | Ministry of Women and Child Development",
+          "supports": ["current_scheme_overview", "eligibility", "cash_incentive", "application"],
+          "limitations": "Retain conditions for first child and second-child girl benefit as separate clauses; do not collapse into one amount."
+        }
+      ]
+    },
+    {
+      "seed_index": 34,
+      "persona": "bpl",
+      "canonical_name": "Deendayal Antyodaya Yojana - National Rural Livelihoods Mission",
+      "scheme_key": "day_nrlm",
+      "seed_query": "DAY National Rural Livelihoods Mission official SHG benefits",
+      "status": "source_ready_with_programme_scope_review",
+      "scope": "central rural livelihood programme; SHG/institution-based, not an individual cash entitlement",
+      "sources": [
+        {
+          "role": "current_official_backgrounder",
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2181702&reg=3&lang=2",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 14313,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "published_at": "2025-10-23",
+          "supports": ["programme_structure", "SHG_reach", "current_context"],
+          "limitations": "Treat as a programme with group/institutional support. Do not represent it as an individual fixed benefit without component-specific rules."
+        },
+        {
+          "role": "official_service_summary",
+          "url": "https://web.umang.gov.in/landing/scheme/detail/deendayal-antyodaya-yojana-national-rural-livelihoods-mission_day-nrlm.html",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 8232,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "fetched_title": "Deendayal Antyodaya Yojana - National Rural Livelihoods Mission",
+          "supports": ["programme_description", "SHG_context"],
+          "limitations": "Use only for descriptive cross-check; identify the specific benefit component before schema extraction."
+        }
+      ]
+    },
+    {
+      "seed_index": 35,
+      "persona": "farmer",
+      "canonical_name": "National Livestock Mission",
+      "scheme_key": "national_livestock_mission",
+      "seed_query": "National Livestock Mission guidelines subsidy eligibility official",
+      "status": "source_ready_with_guideline_refresh",
+      "scope": "central; livestock entrepreneurship and state implementation",
+      "sources": [
+        {
+          "role": "operational_guidelines",
+          "url": "https://dahd.gov.in/sites/default/files/2023-11/NLMGuidelinesFinalApprovedByEC.pdf",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 117319,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "published_at": "2021",
+          "supports": ["mission_components", "eligibility", "implementation"],
+          "limitations": "Guidelines are dated July 2021. Cross-check with the 2025 update for current subsidy caps and any amendments."
+        },
+        {
+          "role": "current_terms_update",
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2099684",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 9480,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "published_at": "2025-02-04",
+          "supports": ["capital_subsidy_caps", "current_scheme_summary"],
+          "limitations": "Extract only NLM facts, not unrelated FSSAI paragraphs in the same PIB release."
+        }
+      ]
+    },
+    {
+      "seed_index": 36,
+      "persona": "farmer",
+      "canonical_name": "Soil Health Card Scheme",
+      "scheme_key": "soil_health_card",
+      "seed_query": "Soil Health Card official FAQ farmer scheme details",
+      "status": "source_ready_with_programme_linkage_review",
+      "scope": "central programme delivered by State Agricultural Departments",
+      "sources": [
+        {
+          "role": "official_faq",
+          "url": "https://soilhealth.dac.gov.in/files/FAQ_Final_English.pdf",
+          "fetch_result": "ok_via_pdf_text_fallback",
+          "http_status": 0,
+          "visible_chars": 5797,
+          "extraction_method": "pypdf_text_fallback",
+          "fetch_verified_at": "2026-10-11",
+          "content_hash": "b2b6fcae4ffc3a12080bc35e92d929db86b8106aaf51d3af20dce0cbeb869180",
+          "supports": ["soil_testing_process", "card_contents", "implementation"],
+          "limitations": "FAQ is an older document and the portal returned 403. Confirm current operational ownership/linkage before treating as a live benefit programme."
+        },
+        {
+          "role": "recent_official_backgrounder",
+          "url": "https://www.pib.gov.in/PressReleasePage.aspx?PRID=2104403",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 5412,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "published_at": "2025-02-18",
+          "supports": ["current_programme_context", "benefit_description"],
+          "limitations": "Backgrounder, not a direct cash benefit or a current application notice."
+        }
+      ]
+    },
+    {
+      "seed_index": 37,
+      "persona": "farmer",
+      "canonical_name": "Pradhan Mantri Formalisation of Micro Food Processing Enterprises Scheme",
+      "scheme_key": "pmfme",
+      "seed_query": "PMFME official scheme guidelines eligibility subsidy",
+      "status": "hold_current_scheme_period",
+      "scope": "central; micro food processing enterprises and group applicants",
+      "sources": [
+        {
+          "role": "official_scheme_portal",
+          "url": "https://pmfme.mofpi.gov.in/",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 1694,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "supports": ["subsidy_summary", "scheme_identity"],
+          "limitations": "Portal is thin. The available official guideline PDF is titled as a 2020 draft, and the published scheme period ended in FY2025-26. Hold until continuation or a current governing version is verified."
+        }
+      ]
+    },
+    {
+      "seed_index": 38,
+      "persona": "farmer",
+      "canonical_name": "PM Surya Ghar: Muft Bijli Yojana",
+      "scheme_key": "pm_surya_ghar",
+      "seed_query": "PM Surya Ghar official guidelines residential subsidy application",
+      "status": "source_ready",
+      "scope": "central residential rooftop solar subsidy; DISCOM implementation",
+      "sources": [
+        {
+          "role": "central_financial_assistance_guidelines",
+          "url": "https://cdnbbsr.s3waas.gov.in/s3716e1b8c6cd17b771da77391355749f3/uploads/2025/07/202507081690964295.pdf",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 100137,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "supports": ["residential_eligibility", "central_subsidy", "implementation"],
+          "limitations": "Residential central financial assistance only; exclude commercial systems and state top-ups unless separately sourced. The main application portal returned 403 in this pass."
+        }
+      ]
+    },
+    {
+      "seed_index": 39,
+      "persona": "bpl",
+      "canonical_name": "Pradhan Mantri Awaas Yojana - Urban 2.0",
+      "scheme_key": "pmay_u_2",
+      "seed_query": "PMAY Urban 2.0 official FAQ eligibility assistance apply",
+      "status": "source_ready",
+      "scope": "central urban housing; State/UT/ULB/PLI implementation",
+      "sources": [
+        {
+          "role": "official_faq",
+          "url": "https://pmaymis.gov.in/pmaymis2_2024/faq.html",
+          "fetch_result": "ok",
+          "http_status": 200,
+          "visible_chars": 40141,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "fetched_title": "PMAY-HFA(Urban) FAQ",
+          "supports": ["PMAY_U_2_verticals", "eligibility", "assistance", "application"],
+          "limitations": "Strictly urban. Keep distinct from PMAY-Gramin. Scheme implementation period is stated as 2024-2029."
+        },
+        {
+          "role": "official_current_application_and_guideline_index",
+          "url": "https://pmaymis.gov.in/PMAYMIS2_2024/scheme-guidelines.html",
+          "fetch_result": "thin_index_with_working_application_links",
+          "http_status": 200,
+          "visible_chars": 964,
+          "extraction_method": "tinyfish_render",
+          "fetch_verified_at": "2026-10-11",
+          "supports": ["portal_navigation", "application_links"],
+          "limitations": "Use the detailed FAQ for rules; this index page is navigation only."
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "original_seed_count": 30,
+    "catalog_record_count": 39,
+    "source_ready_or_conditional": 30,
+    "hold_or_exclude": 9,
+    "target_30_source_ready_reached": true,
+    "not_yet_30_fully_current_and_unconditional": true,
+    "next_action": "Run the parser only for records whose status starts with source_ready, one scheme at a time. For conditional records, resolve their listed currentness/scope checks first. Re-fetch selected URLs and freeze the exact text/hash delivered to the parser. Keep hold/exclude records out of the batch."
+  }
+}
